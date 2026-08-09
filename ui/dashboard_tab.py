@@ -437,8 +437,12 @@ class DashboardTab(QWidget):
         
         self.btn_record = QPushButton("Record RX")
         self.btn_play = QPushButton("Quick Play RX")
-        self.btn_test_tone = QPushButton("Test Tone (PTT)")
+        self.btn_test_tone = QPushButton("Test Tone")
         self.btn_test_tone.setStyleSheet("background-color: #aa5500; font-weight: bold; height: 30px;")
+        
+        self.btn_tune = QPushButton("TUNE (ATU)")
+        self.btn_tune.setStyleSheet("background-color: #8800ff; font-weight: bold; height: 30px;")
+        
         self.btn_live_mic = QPushButton("Live Mic (PTT)")
         self.btn_live_mic.setStyleSheet("background-color: #007700; font-weight: bold; height: 30px;")
         self.btn_stop = QPushButton("Stop All Audio / TX")
@@ -447,6 +451,7 @@ class DashboardTab(QWidget):
         controls_row1.addWidget(self.btn_record)
         controls_row1.addWidget(self.btn_play)
         controls_row1.addWidget(self.btn_test_tone)
+        controls_row1.addWidget(self.btn_tune)
         controls_row1.addWidget(self.btn_live_mic)
         controls_row1.addWidget(self.btn_stop)
         
@@ -521,14 +526,51 @@ class DashboardTab(QWidget):
         self.btn_play.clicked.connect(self.on_play)
         self.btn_test_tone.pressed.connect(self.on_test_tone_start)
         self.btn_test_tone.released.connect(self.on_test_tone_stop)
+        self.btn_tune.clicked.connect(self.on_tune_clicked)
         self.btn_live_mic.pressed.connect(self.on_live_mic_start)
         self.btn_live_mic.released.connect(self.on_live_mic_stop)
         self.btn_qrz.clicked.connect(self.on_qrz_lookup)
         self.btn_log.clicked.connect(self.on_log_clicked)
         
         controls_group.setLayout(controls_v_layout)
+        
+        # Rig Hardware Meters Panel
+        meters_group = QGroupBox("Rig Telemetry")
+        meters_layout = QGridLayout()
+        
+        self.smeter_bar = QProgressBar()
+        self.smeter_bar.setRange(-54, 60) # dBm roughly or standard S-units
+        self.smeter_bar.setFormat("S-Meter: %v")
+        self.smeter_bar.setStyleSheet("QProgressBar::chunk {background-color: #00ff00;}")
+        
+        self.swr_bar = QProgressBar()
+        self.swr_bar.setRange(10, 50) # scaled 1.0 to 5.0
+        self.swr_bar.setFormat("SWR: %v")
+        self.swr_bar.setStyleSheet("QProgressBar::chunk {background-color: #ffaa00;}")
+        
+        self.alc_bar = QProgressBar()
+        self.alc_bar.setRange(0, 100)
+        self.alc_bar.setFormat("ALC: %v%")
+        self.alc_bar.setStyleSheet("QProgressBar::chunk {background-color: #0088ff;}")
+        
+        self.pwr_bar = QProgressBar()
+        self.pwr_bar.setRange(0, 100)
+        self.pwr_bar.setFormat("Power: %vW")
+        self.pwr_bar.setStyleSheet("QProgressBar::chunk {background-color: #ff0000;}")
+        
+        meters_layout.addWidget(QLabel("RX S-Meter"), 0, 0)
+        meters_layout.addWidget(self.smeter_bar, 0, 1)
+        meters_layout.addWidget(QLabel("TX SWR"), 0, 2)
+        meters_layout.addWidget(self.swr_bar, 0, 3)
+        meters_layout.addWidget(QLabel("TX ALC"), 1, 0)
+        meters_layout.addWidget(self.alc_bar, 1, 1)
+        meters_layout.addWidget(QLabel("TX Pwr"), 1, 2)
+        meters_layout.addWidget(self.pwr_bar, 1, 3)
+        meters_group.setLayout(meters_layout)
+        
         layout.addWidget(self.status_label)
         layout.addWidget(controls_group)
+        layout.addWidget(meters_group)
         
         # Presets Section
         presets_group = QGroupBox("CQ Presets")
@@ -920,6 +962,32 @@ class DashboardTab(QWidget):
         else:
             self.status_label.setText("Cannot set frequency: Rig disconnected.")
 
+        
+    def on_tune_clicked(self):
+        if not self.rig_controller.connected:
+            self.status_label.setText("Error: Rig disconnected")
+            return
+            
+        import threading
+        import time
+        def _trigger_tune():
+            # 1. Turn the tuner on if supported via CAT
+            self.rig_controller.set_func("TUNER", True)
+            self.rig_controller.set_func("TUNE", True)
+            
+            # 2. Output a steady tone and key PTT to initiate the tune cycle
+            self.status_label.setText("Tuning: Generating RF Tone...")
+            self.rig_controller.set_ptt(True)
+            self.audio_engine.start_test_tone(1000)
+            
+            time.sleep(3.5)
+            
+            self.audio_engine.stop_test_tone()
+            self.rig_controller.set_ptt(False)
+            self.status_label.setText("Tuning Complete.")
+                
+        threading.Thread(target=_trigger_tune, daemon=True).start()
+
     def update_ui(self):
         # Update UTC Clock
         now_utc = datetime.datetime.now(datetime.timezone.utc)
@@ -943,6 +1011,42 @@ class DashboardTab(QWidget):
         if self.rig_controller.connected:
             self.rig_conn_label.setText(f"Rig: Connected ({self.settings_manager.get('rig_model')})")
             self.rig_freq_label.setText(f"Freq: {self.rig_controller.frequency}")
+            
+            # Update Hardware Meters
+            if self.rig_controller.ptt_state:
+                swr = self.rig_controller.swr
+                alc = self.rig_controller.alc
+                pwr = self.rig_controller.rfpower
+                
+                self.swr_bar.setValue(int(swr * 10) if swr else 10)
+                if swr: self.swr_bar.setFormat(f"SWR: {swr:.1f}")
+                else: self.swr_bar.setFormat("SWR: N/A")
+                
+                self.alc_bar.setValue(int(alc * 100) if alc else 0)
+                if alc: self.alc_bar.setFormat(f"ALC: {int(alc*100)}%")
+                else: self.alc_bar.setFormat("ALC: N/A")
+                
+                self.pwr_bar.setValue(int(pwr * 100) if pwr else 0)
+                if pwr: self.pwr_bar.setFormat(f"Power: {int(pwr*100)}W")
+                else: self.pwr_bar.setFormat("Power: N/A")
+                
+                self.smeter_bar.setValue(-54) # Zero out s-meter during TX
+                self.smeter_bar.setFormat("S-Meter: TX")
+            else:
+                self.swr_bar.setValue(10)
+                self.swr_bar.setFormat("SWR: --")
+                self.alc_bar.setValue(0)
+                self.alc_bar.setFormat("ALC: --")
+                self.pwr_bar.setValue(0)
+                self.pwr_bar.setFormat("Power: --")
+                
+                sm = self.rig_controller.smeter
+                if sm:
+                    self.smeter_bar.setValue(int(sm))
+                    self.smeter_bar.setFormat(f"S-Meter: {sm:.1f} dB")
+                else:
+                    self.smeter_bar.setValue(-54)
+                    self.smeter_bar.setFormat("S-Meter: N/A")
             
             if self.rig_controller.mode and self.rig_controller.mode != self.rig_mode_combo.currentText():
                 self.rig_mode_combo.blockSignals(True)
@@ -973,6 +1077,15 @@ class DashboardTab(QWidget):
             self.rig_ptt_label.setText("PTT: OFF")
             self.freq_widget.freq_hz = 0
             self.freq_widget.update_display()
+            
+            self.swr_bar.setValue(10)
+            self.swr_bar.setFormat("SWR: N/A")
+            self.alc_bar.setValue(0)
+            self.alc_bar.setFormat("ALC: N/A")
+            self.pwr_bar.setValue(0)
+            self.pwr_bar.setFormat("Power: N/A")
+            self.smeter_bar.setValue(-54)
+            self.smeter_bar.setFormat("S-Meter: N/A")
             
             # Disable mode combo if disconnected
             if self.rig_mode_combo.isEnabled():

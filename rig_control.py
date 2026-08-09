@@ -14,6 +14,10 @@ class RigController:
         self.frequency = "Unknown"
         self.mode = "Unknown"
         self.ptt_state = False
+        self.swr = 0.0
+        self.alc = 0.0
+        self.rfpower = 0.0
+        self.smeter = 0.0
         self.last_error = ""
         
         self.sock = None
@@ -207,6 +211,30 @@ class RigController:
                     if ptt:
                         self.ptt_state = (ptt == "1")
 
+                    # Poll Meters (Rate-limited to avoid choking serial)
+                    if self.ptt_state:
+                        # TX Meters
+                        swr_res = self._send_cmd("l SWR")
+                        if swr_res and not swr_res.startswith("RPRT"):
+                            try: self.swr = float(swr_res)
+                            except: pass
+                            
+                        alc_res = self._send_cmd("l ALC")
+                        if alc_res and not alc_res.startswith("RPRT"):
+                            try: self.alc = float(alc_res)
+                            except: pass
+                            
+                        pwr_res = self._send_cmd("l RFPOWER_METER")
+                        if pwr_res and not pwr_res.startswith("RPRT"):
+                            try: self.rfpower = float(pwr_res)
+                            except: pass
+                    else:
+                        # RX Meters
+                        s_res = self._send_cmd("l STRENGTH") # Sometimes STRENGTH, sometimes S-METER
+                        if s_res and not s_res.startswith("RPRT"):
+                            try: self.smeter = float(s_res)
+                            except: pass
+
             time.sleep(0.4) # Poll roughly 2.5 times a second
 
     def set_ptt(self, state):
@@ -259,4 +287,32 @@ class RigController:
                 self.mode = mode_str
                 return True
             return False
+
+    def get_func(self, func_name):
+        with self._lock:
+            res = self._send_cmd(f"u {func_name}")
+            if res and not res.startswith("RPRT"):
+                return res == "1"
+            return None
+
+    def set_func(self, func_name, state):
+        with self._lock:
+            val = "1" if state else "0"
+            res = self._send_cmd(f"U {func_name} {val}")
+            return res == "RPRT 0"
+
+    def get_level(self, level_name):
+        with self._lock:
+            res = self._send_cmd(f"l {level_name}")
+            if res and not res.startswith("RPRT"):
+                try:
+                    return float(res)
+                except:
+                    return None
+            return None
+
+    def set_level(self, level_name, value):
+        with self._lock:
+            res = self._send_cmd(f"L {level_name} {value}")
+            return res == "RPRT 0"
 

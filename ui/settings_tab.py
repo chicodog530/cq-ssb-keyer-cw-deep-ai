@@ -231,6 +231,15 @@ class SettingsTab(QWidget):
         
         self.tabs.addTab(gen_tab, "General")
         
+        # ==========================================
+        # TAB 5: RIG HARDWARE
+        # ==========================================
+        self.hw_tab = QWidget()
+        self.hw_layout = QVBoxLayout(self.hw_tab)
+        self.tabs.addTab(self.hw_tab, "Rig Hardware")
+        
+        self.tabs.currentChanged.connect(self.on_tab_changed)
+        
         self.populate_devices()
         
         # Connect signals
@@ -238,6 +247,89 @@ class SettingsTab(QWidget):
         self.tx_output_combo.currentIndexChanged.connect(lambda idx: self.settings_manager.set("tx_output_index", self._get_device_index(self.audio_manager.get_output_devices(), idx)))
         self.mic_input_combo.currentIndexChanged.connect(lambda idx: self.settings_manager.set("mic_input_index", self._get_device_index(self.audio_manager.get_input_devices(), idx)))
         self.monitor_output_combo.currentIndexChanged.connect(lambda idx: self.settings_manager.set("monitor_output_index", self._get_device_index(self.audio_manager.get_output_devices(), idx)))
+
+    def on_tab_changed(self, index):
+        if self.tabs.tabText(index) == "Rig Hardware":
+            self.build_rig_hw_tab()
+
+    def build_rig_hw_tab(self):
+        # Clear existing
+        for i in reversed(range(self.hw_layout.count())): 
+            widget = self.hw_layout.itemAt(i).widget()
+            if widget: widget.setParent(None)
+            
+        if not self.rig_controller.connected:
+            self.hw_layout.addWidget(QLabel("Radio is not connected.\nConnect your radio on the Radio Control tab to view available hardware settings."))
+            return
+            
+        self.hw_layout.addWidget(QLabel("Querying radio capabilities... Please wait."))
+        
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        container = QWidget()
+        form = QFormLayout(container)
+        
+        funcs_to_check = ["NB", "NR", "COMP", "VOX", "PREAMP", "ATT", "MON", "ANF", "APF"]
+        levels_to_check = ["RFPOWER", "MICGAIN", "RF", "SQL", "IF", "KEYSPD", "CWPITCH"]
+        
+        import threading
+        from PySide6.QtCore import QTimer
+        
+        def _build_rig_ui():
+            supported_funcs = {}
+            for f in funcs_to_check:
+                val = self.rig_controller.get_func(f)
+                if val is not None:
+                    supported_funcs[f] = val
+                    
+            supported_levels = {}
+            for l in levels_to_check:
+                val = self.rig_controller.get_level(l)
+                if val is not None:
+                    supported_levels[l] = val
+                    
+            def _update_ui():
+                # Clear the querying label
+                for i in reversed(range(self.hw_layout.count())): 
+                    widget = self.hw_layout.itemAt(i).widget()
+                    if widget: widget.setParent(None)
+                
+                self.hw_layout.addWidget(QLabel("These settings are queried directly from your radio.\nOnly supported features are shown."))
+                
+                for f, val in supported_funcs.items():
+                    chk = QCheckBox()
+                    chk.setChecked(val)
+                    chk.stateChanged.connect(lambda s, fn=f: self.rig_controller.set_func(fn, bool(s)))
+                    form.addRow(f"{f}:", chk)
+                    
+                for l, val in supported_levels.items():
+                    slider = QSlider(Qt.Horizontal)
+                    slider.setRange(0, 100)
+                    slider.setValue(int(val * 100))
+                    
+                    val_label = QLabel(f"{val:.2f}")
+                    
+                    def on_change(v, lv=l, lbl=val_label):
+                        float_val = v / 100.0
+                        lbl.setText(f"{float_val:.2f}")
+                        self.rig_controller.set_level(lv, float_val)
+                        
+                    slider.valueChanged.connect(on_change)
+                    
+                    row = QHBoxLayout()
+                    row.addWidget(slider)
+                    row.addWidget(val_label)
+                    form.addRow(f"{l}:", row)
+                    
+                if not supported_funcs and not supported_levels:
+                    form.addRow(QLabel("Your radio is connected, but it doesn't seem to support any standard CAT hardware functions/levels."))
+                    
+                scroll.setWidget(container)
+                self.hw_layout.addWidget(scroll)
+                
+            QTimer.singleShot(0, _update_ui)
+            
+        threading.Thread(target=_build_rig_ui, daemon=True).start()
 
 
     def on_qrz_toggled(self, state):
