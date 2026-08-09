@@ -1,8 +1,16 @@
+# Python
 __pycache__/
-*.pyc
-settings.json
-recordings/
-rigctld_debug.log
+*.py[cod]
+*.pyo
 .venv/
-venv/
-env/
+
+# PyInstaller
+build/
+*.spec
+
+# Temp files
+*.tmp
+recordings/*.tmp
+
+# We are intentionally NOT ignoring the dist/ folder because you requested
+# the .exe file to be pushed to git as well!

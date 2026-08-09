@@ -1,4 +1,5 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QComboBox, QPushButton, QFormLayout, QLineEdit, QHBoxLayout, QMessageBox, QGroupBox, QRadioButton, QGridLayout, QSpinBox
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QComboBox, QPushButton, QFormLayout, QLineEdit, QHBoxLayout, QMessageBox, QGroupBox, QRadioButton, QGridLayout, QSpinBox, QSlider
+from PySide6.QtCore import Qt
 import serial.tools.list_ports
 from rig_control import RigController
 
@@ -116,11 +117,13 @@ class SettingsTab(QWidget):
         self.post_roll_spin.valueChanged.connect(lambda v: self.settings_manager.set("tx_post_roll_ms", v))
         delay_layout.addWidget(self.post_roll_spin, 1, 1)
         
+        
         layout.addLayout(form_layout)
         layout.addWidget(self.refresh_btn)
         layout.addLayout(rig_test_layout)
         layout.addWidget(ptt_group)
         layout.addWidget(delay_group)
+
         layout.addStretch()
         
         self.populate_devices()
@@ -130,6 +133,7 @@ class SettingsTab(QWidget):
         self.tx_output_combo.currentIndexChanged.connect(lambda idx: self.settings_manager.set("tx_output_index", self._get_device_index(self.audio_manager.get_output_devices(), idx)))
         self.mic_input_combo.currentIndexChanged.connect(lambda idx: self.settings_manager.set("mic_input_index", self._get_device_index(self.audio_manager.get_input_devices(), idx)))
         self.monitor_output_combo.currentIndexChanged.connect(lambda idx: self.settings_manager.set("monitor_output_index", self._get_device_index(self.audio_manager.get_output_devices(), idx)))
+
 
     def populate_rig_models(self):
         models = RigController.get_models()
@@ -176,12 +180,29 @@ class SettingsTab(QWidget):
             return devices[combo_idx]['index']
         return None
 
+    def _set_combo_index(self, combo, devices, saved_index):
+        if saved_index is None:
+            return
+        for i, d in enumerate(devices):
+            if d['index'] == saved_index:
+                combo.setCurrentIndex(i)
+                return
+
     def populate_devices(self):
         self.audio_manager.refresh_devices()
         
-        inputs = [f"{d['index']}: {d['name']} ({d['hostapi']})" for d in self.audio_manager.get_input_devices()]
-        outputs = [f"{d['index']}: {d['name']} ({d['hostapi']})" for d in self.audio_manager.get_output_devices()]
+        in_devs = self.audio_manager.get_input_devices()
+        out_devs = self.audio_manager.get_output_devices()
         
+        inputs = [f"{d['index']}: {d['name']} ({d['hostapi']})" for d in in_devs]
+        outputs = [f"{d['index']}: {d['name']} ({d['hostapi']})" for d in out_devs]
+        
+        # Block signals so we don't accidentally save blank settings when clearing
+        self.rx_input_combo.blockSignals(True)
+        self.mic_input_combo.blockSignals(True)
+        self.tx_output_combo.blockSignals(True)
+        self.monitor_output_combo.blockSignals(True)
+
         for combo in [self.rx_input_combo, self.mic_input_combo]:
             combo.clear()
             combo.addItems(inputs)
@@ -189,4 +210,14 @@ class SettingsTab(QWidget):
         for combo in [self.tx_output_combo, self.monitor_output_combo]:
             combo.clear()
             combo.addItems(outputs)
+            
+        self._set_combo_index(self.rx_input_combo, in_devs, self.settings_manager.get("rx_input_index"))
+        self._set_combo_index(self.mic_input_combo, in_devs, self.settings_manager.get("mic_input_index"))
+        self._set_combo_index(self.tx_output_combo, out_devs, self.settings_manager.get("tx_output_index"))
+        self._set_combo_index(self.monitor_output_combo, out_devs, self.settings_manager.get("monitor_output_index"))
+        
+        self.rx_input_combo.blockSignals(False)
+        self.mic_input_combo.blockSignals(False)
+        self.tx_output_combo.blockSignals(False)
+        self.monitor_output_combo.blockSignals(False)
 

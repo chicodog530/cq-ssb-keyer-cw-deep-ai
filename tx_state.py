@@ -7,6 +7,8 @@ class SequenceState:
     TX_AUDIO = 2
     POST_ROLL = 3
     INTERVAL_WAIT = 4
+    VERIFYING = 5
+    ERROR = 6
 
 class CQSequenceManager(QObject):
     # Signals to update UI safely
@@ -36,14 +38,19 @@ class CQSequenceManager(QObject):
         self.timer.setSingleShot(True)
         self.timer.timeout.connect(self._on_timer_complete)
         
+        self.watchdog_timer = QTimer(self)
+        self.watchdog_timer.setSingleShot(True)
+        self.watchdog_timer.timeout.connect(self._on_watchdog_timeout)
+        
         self.audio_finished_signal.connect(self.next_phase_after_audio)
 
-    def start_sequence(self, audio_file, repeat_enabled=False, max_repeats=1, repeat_interval_ms=10000):
-        if self.state != SequenceState.IDLE:
+    def start_sequence(self, audio_file, repeat_enabled=False, max_repeats=3, repeat_interval_ms=10000):
+        if self.state not in (SequenceState.IDLE, SequenceState.ERROR):
             return False
             
         tx_idx = self.settings_manager.get("tx_output_index")
         if tx_idx is None:
+            self.state = SequenceState.ERROR
             self.state_changed.emit(self.state, "Error: Select TX Output in Settings first")
             return False
             
@@ -51,33 +58,72 @@ class CQSequenceManager(QObject):
         self.current_file = audio_file
         
         self.repeat_enabled = repeat_enabled
-        self.max_repeats = max_repeats
+        self.max_repeats = max_repeats if max_repeats > 0 else 3 # finite default
         self.current_repeat = 1
         self.repeat_interval_ms = repeat_interval_ms
         
-        self._transition_to_pre_roll()
+        self._transition_to_verifying()
         return True
         
+    def _on_watchdog_timeout(self):
+        self.state = SequenceState.ERROR
+        self.state_changed.emit(self.state, "Error: TX Watchdog Timeout! (60s max)")
+        self.abort()
+
     def abort(self):
-        self.timer.stop()
-        self.audio_engine.stop_playback()
-        if self.rig_controller.connected:
-            self.rig_controller.set_ptt(False)
+        try:
+            self.timer.stop()
+            self.watchdog_timer.stop()
+            self.audio_engine.stop_playback()
+        finally:
+            # Guaranteed PTT off attempt
+            try:
+                if self.rig_controller.connected:
+                    self.rig_controller.set_ptt(False)
+            except Exception as e:
+                print(f"Failed to set PTT off during abort: {e}")
+                
+        if self.state != SequenceState.ERROR:
+            self.state = SequenceState.IDLE
+            self.state_changed.emit(self.state, "Sequence Aborted")
             
-        self.state = SequenceState.IDLE
-        self.state_changed.emit(self.state, "Sequence Aborted")
         self.sequence_finished.emit()
+
+    def _transition_to_verifying(self):
+        self.state = SequenceState.VERIFYING
+        self.state_changed.emit(self.state, "Verifying Rig Connection...")
+        
+        if not self.rig_controller.connected:
+            self.state = SequenceState.ERROR
+            self.state_changed.emit(self.state, "Error: Rig disconnected")
+            self.abort()
+            return
+            
+        if self.rig_controller.ptt_state:
+            self.state = SequenceState.ERROR
+            self.state_changed.emit(self.state, "Error: PTT is already active")
+            self.abort()
+            return
+            
+        # Try to set PTT On and wait for RPRT 0
+        success = self.rig_controller.set_ptt(True)
+        if not success:
+            self.state = SequenceState.ERROR
+            self.state_changed.emit(self.state, "Error: Rig rejected PTT ON command")
+            self.abort()
+            return
+            
+        # Start watchdog the moment PTT is enabled
+        self.watchdog_timer.start(60000)
+        self._transition_to_pre_roll()
 
     def _transition_to_pre_roll(self):
         self.state = SequenceState.PRE_ROLL
         msg = "Pre-Roll (PTT Keyed)..."
         if self.repeat_enabled:
-            msg += f" [Repeat {self.current_repeat}/{self.max_repeats if self.max_repeats > 0 else 'Infinite'}]"
+            msg += f" [Repeat {self.current_repeat}/{self.max_repeats}]"
         self.state_changed.emit(self.state, msg)
         
-        if self.rig_controller.connected:
-            self.rig_controller.set_ptt(True)
-            
         pre_roll_delay = int(self.settings_manager.get("tx_pre_roll_ms", 200))
         self.timer.start(pre_roll_delay)
 
@@ -88,7 +134,7 @@ class CQSequenceManager(QObject):
             self._transition_to_interval_or_idle()
         elif self.state == SequenceState.INTERVAL_WAIT:
             self.current_repeat += 1
-            self._transition_to_pre_roll()
+            self._transition_to_verifying()
 
     def _transition_to_tx_audio(self):
         self.state = SequenceState.TX_AUDIO
@@ -96,13 +142,14 @@ class CQSequenceManager(QObject):
         
         self.audio_engine.set_playback_finished_callback(self._on_audio_finished)
         
-        success = self.audio_engine.start_playback(self.tx_device_idx, self.current_file)
+        tx_gain_db = self.settings_manager.get("tx_gain_db", -6)
+        success = self.audio_engine.start_playback(self.tx_device_idx, self.current_file, tx_gain_db)
         if not success:
+            self.state = SequenceState.ERROR
             self.state_changed.emit(self.state, "Error starting playback")
             self.abort()
 
     def _on_audio_finished(self):
-        # Called by audio engine thread. Emitting a signal safely hops to the main thread.
         self.audio_finished_signal.emit()
 
     def next_phase_after_audio(self):
@@ -115,10 +162,13 @@ class CQSequenceManager(QObject):
         self.timer.start(post_roll_delay)
 
     def _transition_to_interval_or_idle(self):
+        # Stop watchdog since we are dropping PTT
+        self.watchdog_timer.stop()
+        
         if self.rig_controller.connected:
             self.rig_controller.set_ptt(False)
             
-        if self.repeat_enabled and (self.max_repeats == 0 or self.current_repeat < self.max_repeats):
+        if self.repeat_enabled and self.current_repeat < self.max_repeats:
             self.state = SequenceState.INTERVAL_WAIT
             self.state_changed.emit(self.state, f"Waiting {self.repeat_interval_ms/1000}s for next sequence...")
             self.timer.start(self.repeat_interval_ms)

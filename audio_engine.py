@@ -12,6 +12,7 @@ class AudioEngine:
         self.is_recording = False
         self.is_playing = False
         self.is_monitoring = False
+        self.monitor_volume = 1.0
         
         self.audio_queue = queue.Queue()
         self.worker_thread = None
@@ -25,12 +26,26 @@ class AudioEngine:
         self.scope_data_rx = np.zeros(512, dtype=np.float32)
         self.scope_data_tx = np.zeros(512, dtype=np.float32)
 
+    def is_device_valid(self, device_index, kind):
+        if device_index is None:
+            return False
+        try:
+            sd.query_devices(device_index, kind)
+            return True
+        except:
+            return False
+
     def set_playback_finished_callback(self, cb):
         self.playback_finished_callback = cb
         
     def start_recording(self, device_index, filename, samplerate=None, channels=1):
         if self.is_recording or self.is_playing:
             return False
+            
+        # Reset meters and scope
+        self.current_peak = 0.0
+        self.is_clipping = False
+        self.scope_data_rx.fill(0)
             
         try:
             device_info = sd.query_devices(device_index, 'input')
@@ -41,12 +56,16 @@ class AudioEngine:
             return False
             
         self.is_recording = True
-        self.audio_queue = queue.Queue()
+        self.audio_queue = queue.Queue(maxsize=100) # Bounded queue
+        self.dropped_buffers = 0
         
         def callback(indata, frames, time, status):
             if status:
                 print(status)
-            self.audio_queue.put(indata.copy())
+            try:
+                self.audio_queue.put_nowait(indata.copy())
+            except queue.Full:
+                self.dropped_buffers += 1
             
             # Metering
             peak = np.max(np.abs(indata))
@@ -75,14 +94,21 @@ class AudioEngine:
             return False
         
     def _file_writer(self, filename, samplerate, channels):
-        with sf.SoundFile(filename, mode='x', samplerate=int(samplerate),
-                          channels=channels, subtype='PCM_16') as file:
-            while self.is_recording:
+        # We use mode 'w' to overwrite atomically if it's a temp file
+        with sf.SoundFile(filename, mode='w', samplerate=int(samplerate),
+                          channels=channels, subtype='PCM_16', format='WAV') as file:
+            while True:
                 try:
                     data = self.audio_queue.get(timeout=0.1)
+                    if data is None: # Sentinel received, drain complete
+                        break
                     file.write(data)
                 except queue.Empty:
+                    if not self.is_recording:
+                        break
                     continue
+            if self.dropped_buffers > 0:
+                print(f"Warning: {self.dropped_buffers} audio buffers were dropped during recording!")
 
     def stop_recording(self):
         self.is_recording = False
@@ -90,37 +116,101 @@ class AudioEngine:
             self.stream.stop()
             self.stream.close()
             self.stream = None
-        if self.worker_thread:
-            self.worker_thread.join()
+        try:
+            self.audio_queue.put_nowait(None) # Send sentinel to drain queue
+        except queue.Full:
+            pass
             
-    def start_playback(self, device_index, filename):
+        if self.worker_thread:
+            self.worker_thread.join(timeout=2.0)
+            if self.worker_thread.is_alive():
+                print("Error: Audio writer thread failed to terminate cleanly.")
+            self.worker_thread = None
+            
+    def start_playback(self, device_index, filename, tx_gain_db=0):
         if self.is_recording or self.is_playing:
             return False
+            
+        # Reset meters and scope
+        self.current_peak = 0.0
+        self.is_clipping = False
+        self.scope_data_tx.fill(0)
             
         try:
             data, fs = sf.read(filename, dtype='float32')
             
-            # Remove DC offset (critical for cheap PC mics)
-            data = data - np.mean(data)
+            if len(data) == 0:
+                print("Error: Audio file is empty.")
+                return False
             
-            # Auto-normalize audio to 0.95 peak for strong, consistent modulation
-            peak = np.max(np.abs(data))
-            if peak > 0.0:
-                data = data * (0.95 / peak)
+            device_info = sd.query_devices(device_index, 'output')
+            target_fs = int(device_info['default_samplerate'])
+            
+            # Stereo USB Support
+            out_channels = min(2, device_info['max_output_channels'])
+            
+            # Auto-Resample
+            if fs != target_fs:
+                duration = len(data) / fs
+                new_len = int(duration * target_fs)
+                x_old = np.linspace(0, duration, len(data))
+                x_new = np.linspace(0, duration, new_len)
+                
+                if len(data.shape) > 1:
+                    new_data = np.zeros((new_len, data.shape[1]), dtype=np.float32)
+                    for i in range(data.shape[1]):
+                        new_data[:, i] = np.interp(x_new, x_old, data[:, i])
+                    data = new_data
+                else:
+                    data = np.interp(x_new, x_old, data).astype(np.float32)
+                fs = target_fs
+            
+            # Remove DC offset
+            if len(data) > 0:
+                data = data - np.mean(data)
+                
+            # Apply TX Gain (dB to linear)
+            if len(data) > 0:
+                linear_gain = 10 ** (tx_gain_db / 20.0)
+                data = data * linear_gain
+                
+            # Hard Clip Guard (-1 dBFS = ~0.89)
+            clip_limit = 0.89125
+            if len(data) > 0:
+                data = np.clip(data, -clip_limit, clip_limit)
                 
             self.is_playing = True
+            
+            # Mono to Stereo duplication if required
+            if len(data.shape) > 1:
+                data = data[:, 0].reshape(-1, 1)
+            else:
+                data = data.reshape(-1, 1)
+                
+            if out_channels == 2:
+                data = np.column_stack((data, data))
             
             def callback(outdata, frames, time, status):
                 if status:
                     print(status)
                 chunksize = min(len(data) - self.playback_pos, frames)
-                outdata[:chunksize] = data[self.playback_pos:self.playback_pos + chunksize]
+                
+                chunk_data = data[self.playback_pos:self.playback_pos + chunksize]
+                outdata[:chunksize] = chunk_data
+                
                 if chunksize < frames:
                     outdata[chunksize:] = 0
                     raise sd.CallbackStop
                 self.playback_pos += chunksize
                 
-                # Scope Update
+                # Metering post-gain
+                if chunksize > 0:
+                    peak = np.max(np.abs(chunk_data))
+                    self.current_peak = peak
+                    if peak >= clip_limit - 0.01:
+                        self.is_clipping = True
+                
+                # Scope Update (use channel 0)
                 if chunksize >= 512:
                     self.scope_data_tx[:] = outdata[-512:, 0]
                 elif chunksize > 0:
@@ -128,14 +218,9 @@ class AudioEngine:
                     self.scope_data_tx[-chunksize:] = outdata[:chunksize, 0]
 
             self.playback_pos = 0
-            # Mono playback
-            if len(data.shape) > 1:
-                data = data[:, 0].reshape(-1, 1)
-            else:
-                data = data.reshape(-1, 1)
 
             self.stream = sd.OutputStream(samplerate=fs, device=device_index,
-                                          channels=1, callback=callback, finished_callback=self._playback_finished)
+                                          channels=out_channels, callback=callback, finished_callback=self._playback_finished)
             self.stream.start()
             return True
         except Exception as e:
@@ -144,23 +229,31 @@ class AudioEngine:
             return False
             
     def _playback_finished(self):
+        if not self.is_playing:
+            return # Prevent double-firing
         self.is_playing = False
-        if self.stream:
-            self.stream.close()
-            self.stream = None
         
-        if self.playback_finished_callback:
-            self.playback_finished_callback()
+        cb = self.playback_finished_callback
+        self.playback_finished_callback = None
+        if cb:
+            cb()
 
     def stop_playback(self):
         if self.is_playing and self.stream:
-            self.stream.stop()
+            try:
+                self.stream.stop()
+                self.stream.close()
+            except:
+                pass
+            self.stream = None
             self._playback_finished()
 
-    def start_monitoring(self, rx_device, monitor_device, samplerate=None, channels=1):
+    def start_monitoring(self, rx_device, monitor_device, volume=1.0, samplerate=None, channels=1):
         if self.is_monitoring:
             return False
             
+        self.monitor_volume = volume
+        
         try:
             device_info = sd.query_devices(rx_device, 'input')
             if samplerate is None:
@@ -169,7 +262,7 @@ class AudioEngine:
             def callback(indata, outdata, frames, time, status):
                 if status:
                     print(status)
-                outdata[:] = indata
+                outdata[:] = indata * self.monitor_volume
                 
                 # Metering
                 peak = np.max(np.abs(indata))

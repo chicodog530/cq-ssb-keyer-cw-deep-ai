@@ -35,8 +35,9 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.tabs)
 
     def closeEvent(self, event):
-        self.rig_controller.stop()
+        self.sequence_manager.abort()
         self.audio_engine.stop_recording()
         self.audio_engine.stop_playback()
         self.audio_engine.stop_monitoring()
+        self.rig_controller.stop()
         super().closeEvent(event)

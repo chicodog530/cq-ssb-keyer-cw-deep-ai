@@ -160,18 +160,21 @@ class RigController:
         if not self.sock:
             return None
         try:
+            self.sock.settimeout(2.0)
             self.sock.sendall((cmd + "\n").encode('utf-8'))
             data = self.sock.recv(1024)
             return data.decode('utf-8').strip()
-        except socket.timeout:
-            self.connected = False
+        except (socket.timeout, TimeoutError):
             self.last_error = f"Command '{cmd}' timed out! Radio is not responding to rigctld. Check Baud, DTR/RTS, or if radio is ON."
-            self.sock = None
+            self._disconnect()
+            return None
+        except (ConnectionRefusedError, ConnectionResetError, OSError, ConnectionError) as e:
+            self.last_error = f"Connection error: {str(e)}"
+            self._disconnect()
             return None
         except Exception as e:
-            self.connected = False
             self.last_error = str(e)
-            self.sock = None
+            self._disconnect()
             return None
 
     def _poll_loop(self):
@@ -242,9 +245,10 @@ class RigController:
             self._pause_polling = False
 
     def set_frequency(self, freq_hz):
-        res = self._send_cmd(f"F {freq_hz}")
-        if res == "RPRT 0":
-            self.frequency = str(freq_hz)
-            return True
-        return False
+        with self._lock:
+            res = self._send_cmd(f"F {freq_hz}")
+            if res == "RPRT 0":
+                self.frequency = str(freq_hz)
+                return True
+            return False
 

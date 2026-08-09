@@ -1,0 +1,50 @@
+{
+    "rx_input_index": 17,
+    "tx_output_index": 22,
+    "mic_input_index": 14,
+    "monitor_output_index": 19,
+    "recordings_dir": "recordings",
+    "rig_com_port": "COM4",
+    "rig_model": "1049",
+    "rig_baud": "38400",
+    "rig_data_bits": "8",
+    "rig_stop_bits": "1",
+    "rig_handshake": "None",
+    "presets": [
+        {
+            "text": "General CQ",
+            "file": "C:/Users/chico/.gemini/antigravity/scratch/CQVoiceKeyer/recordings/preset_0.wav"
+        },
+        {
+            "text": "POTA CQ",
+            "file": "C:/Users/chico/.gemini/antigravity/scratch/CQVoiceKeyer/recordings/RX_20260808-231515.wav"
+        },
+        {
+            "text": "Station ID",
+            "file": "C:/Users/chico/.gemini/antigravity/scratch/CQVoiceKeyer/recordings/preset_2.wav"
+        },
+        {
+            "text": "Name, City & State",
+            "file": ""
+        },
+        {
+            "text": "New Preset 5",
+            "file": ""
+        },
+        {
+            "text": "New Preset 6",
+            "file": ""
+        },
+        {
+            "text": "dumbshit",
+            "file": "C:/Users/chico/.gemini/antigravity/scratch/CQVoiceKeyer/recordings/preset_6.wav"
+        },
+        {
+            "text": "New Preset 8",
+            "file": "C:/Users/chico/.gemini/antigravity/scratch/CQVoiceKeyer/recordings/RX_20260809-005952.wav"
+        }
+    ],
+    "tx_gain_db": 0,
+    "monitor_volume": 35,
+    "preset_columns": 6
+}
