@@ -56,6 +56,7 @@ To automate your exchanges:
 
 ### CQ Presets (Voice Keyer)
 You can configure up to 8 automated audio sequences (like "CQ Contest" or your Station ID).
-- **Right-Click a Preset:** Edit the button name and select an audio file (or record a new one using your mic).
-- **Left-Click a Preset:** Instantly key the radio and play the audio file.
+- **Right-Click a Preset:** Edit the button name, select a pre-recorded audio file, record a new one using your mic, or **Edit TTS Message** to set a custom phrase for the text-to-speech engine.
+- **Left-Click a Preset:** Instantly key the radio and play the audio file (or generate and play the TTS message).
+- **Use TTS for Presets:** Check the `Send Text-to-Speech` box above the presets. When checked, clicking a preset will speak its saved TTS message instead of playing its audio file.
 - **Repeat Sequence:** Check this box and set the max repeats to loop your CQ message automatically until you disable it.

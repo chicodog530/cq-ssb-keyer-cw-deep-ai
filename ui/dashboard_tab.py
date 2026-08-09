@@ -102,10 +102,11 @@ class QAudioScope(QWidget):
         self.update()
 
 class PresetButton(QPushButton):
-    def __init__(self, index, text, file, settings_manager, dashboard, parent=None):
+    def __init__(self, index, text, file, tts_text, settings_manager, dashboard, parent=None):
         super().__init__(text, parent)
         self.index = index
         self.audio_file = file
+        self.tts_text = tts_text
         self.settings_manager = settings_manager
         self.dashboard = dashboard
         
@@ -122,6 +123,10 @@ class PresetButton(QPushButton):
         edit_text_action = QAction("Edit Button Text...", self)
         edit_text_action.triggered.connect(self.edit_text)
         menu.addAction(edit_text_action)
+        
+        edit_tts_action = QAction("Edit TTS Message...", self)
+        edit_tts_action.triggered.connect(self.edit_tts_message)
+        menu.addAction(edit_tts_action)
         
         record_mic_action = QAction("Record from PC Mic...", self)
         record_mic_action.triggered.connect(self.record_from_mic)
@@ -174,6 +179,13 @@ class PresetButton(QPushButton):
         if ok and text:
             self.setText(text)
             self.dashboard.save_presets()
+
+    def edit_tts_message(self):
+        text, ok = QInputDialog.getText(self, "Edit TTS Message", "Enter the exact text to speak for this preset:", text=self.tts_text)
+        if ok:
+            self.tts_text = text
+            self.dashboard.save_presets()
+            self.dashboard.status_label.setText(f"Saved TTS Message for {self.text()}")
 
     def set_file(self):
         file, _ = QFileDialog.getOpenFileName(self, "Select Audio File", "", "Audio Files (*.wav)")
@@ -257,10 +269,7 @@ class PresetButton(QPushButton):
             self.dashboard.status_label.setText(f"Previewing: {self.text()}")
 
     def on_left_click(self):
-        if not self.audio_file or not os.path.exists(self.audio_file):
-            self.dashboard.status_label.setText("No audio file set for this preset.")
-            return
-            
+        import os
         tx_idx = self.settings_manager.get("tx_output_index")
         if tx_idx is None:
             self.dashboard.status_label.setText("Error: Select TX Output in Settings first")
@@ -270,9 +279,29 @@ class PresetButton(QPushButton):
             self.dashboard.status_label.setText("Error: TX output device unplugged or invalid!")
             return
             
+        if hasattr(self.dashboard, 'tts_presets_checkbox') and self.dashboard.tts_presets_checkbox.isChecked():
+            if not getattr(self, 'tts_text', ""):
+                self.dashboard.status_label.setText("No TTS message set for this preset (Right-click to set).")
+                return
+            import tempfile
+            temp_wav = os.path.join(tempfile.gettempdir(), f"tts_preset_{self.index}.wav")
+            voice_id = self.settings_manager.get("tts_voice_id")
+            rate = self.settings_manager.get("tts_rate", 150)
+            try:
+                self.dashboard.audio_engine.generate_tts_wav("", "", temp_wav, custom_text=self.tts_text, voice_id=voice_id, rate=rate)
+            except Exception as e:
+                self.dashboard.status_label.setText(f"Error generating TTS: {e}")
+                return
+            play_file = temp_wav
+        else:
+            if not self.audio_file or not os.path.exists(self.audio_file):
+                self.dashboard.status_label.setText("No audio file set for this preset.")
+                return
+            play_file = self.audio_file
+            
         # Key the radio and play the sequence via State Machine
         self.dashboard.sequence_manager.start_sequence(
-            self.audio_file,
+            play_file,
             repeat_enabled=self.dashboard.repeat_checkbox.isChecked(),
             max_repeats=self.dashboard.repeat_spinbox.value(),
             repeat_interval_ms=10000
@@ -499,6 +528,11 @@ class DashboardTab(QWidget):
         preset_header = QHBoxLayout()
         preset_header.addWidget(QLabel("CQ Presets (Left Click to TX, Right Click to Edit):"))
         preset_header.addStretch()
+        self.tts_presets_checkbox = QCheckBox("Send Text-to-Speech")
+        self.tts_presets_checkbox.setChecked(self.settings_manager.get("use_tts_presets", False))
+        self.tts_presets_checkbox.stateChanged.connect(lambda s: self.settings_manager.set("use_tts_presets", bool(s)))
+        preset_header.addWidget(self.tts_presets_checkbox)
+        
         self.repeat_checkbox = QCheckBox("Repeat Sequence")
         preset_header.addWidget(self.repeat_checkbox)
         preset_header.addWidget(QLabel("Max Repeats:"))
@@ -556,7 +590,7 @@ class DashboardTab(QWidget):
         
         cols = self.settings_manager.get("preset_columns", 4)
         for idx, p_data in enumerate(presets_data):
-            btn = PresetButton(idx, p_data.get("text", f"Preset {idx+1}"), p_data.get("file", ""), self.settings_manager, self)
+            btn = PresetButton(idx, p_data.get("text", f"Preset {idx+1}"), p_data.get("file", ""), p_data.get("tts_text", ""), self.settings_manager, self)
             row = idx // cols
             col = idx % cols
             self.presets_layout.addWidget(btn, row, col)
@@ -591,7 +625,11 @@ class DashboardTab(QWidget):
     def save_presets(self):
         presets_data = []
         for btn in self.preset_buttons:
-            presets_data.append({"text": btn.text(), "file": btn.audio_file})
+            presets_data.append({
+                "text": btn.text(), 
+                "file": btn.audio_file,
+                "tts_text": getattr(btn, "tts_text", "")
+            })
         self.settings_manager.set("presets", presets_data)
         
     def on_monitor_vol_changed(self, val):

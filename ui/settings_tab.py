@@ -50,6 +50,9 @@ class SettingsTab(QWidget):
             idx = self.tts_voice_combo.findData(current_voice)
             if idx >= 0:
                 self.tts_voice_combo.setCurrentIndex(idx)
+        else:
+            if self.tts_voice_combo.count() > 0:
+                self.settings_manager.set("tts_voice_id", self.tts_voice_combo.itemData(0))
                 
         self.tts_voice_combo.currentIndexChanged.connect(
             lambda idx: self.settings_manager.set("tts_voice_id", self.tts_voice_combo.itemData(idx))
