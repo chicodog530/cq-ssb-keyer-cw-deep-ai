@@ -482,6 +482,13 @@ class DashboardTab(QWidget):
         self.tts_rst_edit.setPlaceholderText("RST (e.g. 59)")
         self.tts_rst_edit.setText("59")
         self.tts_rst_edit.setMaximumWidth(60)
+        self.tts_send_rst_checkbox = QCheckBox("Send RST")
+        self.tts_send_rst_checkbox.setChecked(self.settings_manager.get("tts_send_rst", True))
+        self.tts_send_rst_checkbox.stateChanged.connect(lambda s: self.settings_manager.set("tts_send_rst", bool(s)))
+        
+        self.tts_from_me_checkbox = QCheckBox("From My Call")
+        self.tts_from_me_checkbox.setChecked(self.settings_manager.get("tts_include_my_call", False))
+        self.tts_from_me_checkbox.stateChanged.connect(lambda s: self.settings_manager.set("tts_include_my_call", bool(s)))
         
         self.tts_custom_edit = QLineEdit()
         self.tts_custom_edit.setPlaceholderText("Custom Msg (Overrides Callsign)")
@@ -492,7 +499,9 @@ class DashboardTab(QWidget):
         self.btn_send_exchange.clicked.connect(self.on_send_exchange_clicked)
         
         controls_row3.addWidget(self.tts_checkbox)
+        controls_row3.addWidget(self.tts_send_rst_checkbox)
         controls_row3.addWidget(self.tts_rst_edit)
+        controls_row3.addWidget(self.tts_from_me_checkbox)
         controls_row3.addWidget(self.tts_custom_edit)
         controls_row3.addWidget(self.btn_send_exchange)
         controls_row3.addStretch()
@@ -710,7 +719,7 @@ class DashboardTab(QWidget):
             return
             
         call = self.target_call_edit.text().strip()
-        rst = self.tts_rst_edit.text().strip()
+        rst = self.tts_rst_edit.text().strip() if self.tts_send_rst_checkbox.isChecked() else None
         custom = self.tts_custom_edit.text().strip()
         
         if not custom and not call:
@@ -733,7 +742,8 @@ class DashboardTab(QWidget):
         try:
             voice_id = self.settings_manager.get("tts_voice_id")
             rate = self.settings_manager.get("tts_rate", 150)
-            self.audio_engine.generate_tts_wav(call, rst, temp_wav, custom_text=custom, voice_id=voice_id, rate=rate)
+            my_call = self.settings_manager.get("my_callsign", "") if self.tts_from_me_checkbox.isChecked() else None
+            self.audio_engine.generate_tts_wav(call, rst, temp_wav, custom_text=custom, voice_id=voice_id, rate=rate, my_call=my_call)
         except Exception as e:
             self.status_label.setText(f"Error generating TTS: {e}")
             return

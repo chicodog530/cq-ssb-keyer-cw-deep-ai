@@ -296,3 +296,11 @@
 12:09:28 - IPv4 connect SUCCESS
 12:09:28 - Attempting _connect to 127.0.0.1:4532
 12:09:28 - IPv4 connect SUCCESS
+12:17:40 - Starting rigctld. Exists: True
+12:17:40 - Started bundled rigctld with args: ['C:\\Users\\chico\\.gemini\\antigravity\\scratch\\CQVoiceKeyer\\rigctld\\rigctld-wsjtx.exe', '-m', '1049', '-r', 'COM4', '-s', '38400', '-t', '4532', '-C', 'data_bits=8,stop_bits=1,serial_handshake=None,rts_state=OFF']
+12:17:40 - Attempting _connect to 127.0.0.1:4532
+12:17:41 - IPv4 connect SUCCESS
+12:19:17 - Starting rigctld. Exists: True
+12:19:17 - Started bundled rigctld with args: ['C:\\Users\\chico\\.gemini\\antigravity\\scratch\\CQVoiceKeyer\\rigctld\\rigctld-wsjtx.exe', '-m', '1049', '-r', 'COM4', '-s', '38400', '-t', '4532', '-C', 'data_bits=8,stop_bits=1,serial_handshake=None,rts_state=OFF']
+12:19:17 - Attempting _connect to 127.0.0.1:4532
+12:19:18 - IPv4 connect SUCCESS

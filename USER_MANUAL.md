@@ -26,6 +26,10 @@ Before operating, navigate to the **Settings** tab to configure your radio and a
 ### 3. Logging & Services
 - Enter your credentials for QRZ, eQSL, or LoTW if you want the app to automatically log your contacts to the cloud when you press the **LOG** button.
 
+### 4. General
+- **My Station Callsign:** Enter your callsign here. This is used for the `From My Call` TTS feature on the dashboard to automatically append your callsign to transmissions.
+- **UI Options:** Toggle helpful tooltips on or off.
+
 ---
 
 ## Operating the Dashboard
@@ -50,9 +54,11 @@ Visualizes the audio coming from your radio (RX) and going to your radio (TX).
 ### TTS Voice Keyer (Text-to-Speech)
 To automate your exchanges:
 1. Check the **TTS Voice Keyer** box.
-2. Ensure you have a callsign typed in the *Target Callsign* box, and an RST (default is 59).
-3. Click **Send Exchange**. The app will generate the phonetic callsign (e.g. "Kilo One Alpha, you are Five Nine"), key the radio, and transmit it.
-4. *Custom Messages:* If you type in the "Custom Msg" box, clicking *Send Exchange* will speak exactly what you typed instead of the Callsign/RST.
+2. Ensure you have a callsign typed in the *Target Callsign* box.
+3. **Send RST**: Check this box to include the signal report (default is 59). Uncheck it to skip the signal report entirely.
+4. **From My Call**: Check this box to automatically append ", from [Your Callsign]" to the end of the transmission. Make sure you set your callsign in the General Settings tab!
+5. Click **Send Exchange**. The app will generate the phonetic text, key the radio, and transmit it.
+6. *Custom Messages:* If you type in the "Custom Msg" box, clicking *Send Exchange* will speak exactly what you typed instead of the standard exchange format.
 
 ### CQ Presets (Voice Keyer)
 You can configure up to 8 automated audio sequences (like "CQ Contest" or your Station ID).

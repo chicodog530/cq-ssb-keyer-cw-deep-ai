@@ -40,16 +40,6 @@
             "text": "73' ",
             "file": "C:\\Users\\chico\\.gemini\\antigravity\\scratch\\CQVoiceKeyer\\recordings\\73'_.wav",
             "tts_text": "thanks for the call, have a blessed day , from kilo echo zero charlie golf bravo,  7 3"
-        },
-        {
-            "text": "dumbshit",
-            "file": "C:/Users/chico/.gemini/antigravity/scratch/CQVoiceKeyer/recordings/preset_6.wav",
-            "tts_text": ""
-        },
-        {
-            "text": "New Preset 8",
-            "file": "C:/Users/chico/.gemini/antigravity/scratch/CQVoiceKeyer/recordings/preset_7.wav",
-            "tts_text": ""
         }
     ],
     "tx_gain_db": 0,
@@ -60,5 +50,8 @@
     "use_tts_presets": true,
     "qrz_lookup_method": "Web Browser (Free)",
     "lotw_enable": true,
-    "tts_voice_id": "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Speech\\Voices\\Tokens\\TTS_MS_EN-US_DAVID_11.0"
+    "tts_voice_id": "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Speech\\Voices\\Tokens\\TTS_MS_EN-US_DAVID_11.0",
+    "tts_send_rst": false,
+    "tts_include_my_call": true,
+    "my_callsign": "KE0CGB"
 }

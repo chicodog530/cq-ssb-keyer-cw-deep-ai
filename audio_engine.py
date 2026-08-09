@@ -392,7 +392,7 @@ class AudioEngine:
         except:
             return []
 
-    def generate_tts_wav(self, callsign, rst, filepath, custom_text=None, voice_id=None, rate=150):
+    def generate_tts_wav(self, callsign, rst, filepath, custom_text=None, voice_id=None, rate=150, my_call=None):
         import pyttsx3
         engine = pyttsx3.init()
         
@@ -425,10 +425,22 @@ class AudioEngine:
                     
             spoken_call = " ".join(phonetic_call)
             
-            # RST characters should be spoken as individual digits
-            spoken_rst = " ".join(list(str(rst)))
+            if rst:
+                # RST characters should be spoken as individual digits
+                spoken_rst = " ".join(list(str(rst)))
+                text_to_speak = f"{spoken_call}, you are {spoken_rst}."
+            else:
+                text_to_speak = f"{spoken_call}."
             
-            text_to_speak = f"{spoken_call}, you are {spoken_rst}."
+            if my_call:
+                phonetic_my_call = []
+                for char in my_call.upper():
+                    if char in ITU_PHONETICS:
+                        phonetic_my_call.append(ITU_PHONETICS[char])
+                    elif char.strip():
+                        phonetic_my_call.append(char)
+                spoken_my_call = " ".join(phonetic_my_call)
+                text_to_speak += f" from {spoken_my_call}."
             
         engine.save_to_file(text_to_speak, filepath)
         engine.runAndWait()

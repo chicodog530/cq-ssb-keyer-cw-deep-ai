@@ -220,6 +220,10 @@ class SettingsTab(QWidget):
         gen_tab = QWidget()
         gen_layout = QFormLayout(gen_tab)
         
+        self.my_callsign_edit = QLineEdit(self.settings_manager.get("my_callsign", ""))
+        self.my_callsign_edit.textChanged.connect(lambda t: self.settings_manager.set("my_callsign", t.upper()))
+        gen_layout.addRow("My Station Callsign:", self.my_callsign_edit)
+        
         self.show_tooltips_check = QCheckBox("Show Helpful Tooltips")
         self.show_tooltips_check.setChecked(self.settings_manager.get("show_tooltips", True))
         self.show_tooltips_check.stateChanged.connect(lambda s: self.settings_manager.set("show_tooltips", bool(s)))
