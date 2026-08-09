@@ -308,3 +308,22 @@
 12:36:25 - Started bundled rigctld with args: ['C:\\Users\\chico\\.gemini\\antigravity\\scratch\\CQVoiceKeyer\\rigctld\\rigctld-wsjtx.exe', '-m', '1049', '-r', 'COM4', '-s', '38400', '-t', '4532', '-C', 'data_bits=8,stop_bits=1,serial_handshake=None,rts_state=OFF']
 12:36:25 - Attempting _connect to 127.0.0.1:4532
 12:36:26 - IPv4 connect SUCCESS
+12:43:54 - Starting rigctld. Exists: True
+12:43:54 - Started bundled rigctld with args: ['C:\\Users\\chico\\.gemini\\antigravity\\scratch\\CQVoiceKeyer\\rigctld\\rigctld-wsjtx.exe', '-m', '1049', '-r', 'COM4', '-s', '38400', '-t', '4532', '-C', 'data_bits=8,stop_bits=1,serial_handshake=None,rts_state=OFF']
+12:43:54 - Attempting _connect to 127.0.0.1:4532
+12:43:54 - IPv4 connect SUCCESS
+12:44:33 - Starting rigctld. Exists: True
+12:44:33 - Started bundled rigctld with args: ['C:\\Users\\chico\\.gemini\\antigravity\\scratch\\CQVoiceKeyer\\rigctld\\rigctld-wsjtx.exe', '-m', '1049', '-r', 'COM4', '-s', '38400', '-t', '4532', '-C', 'data_bits=8,stop_bits=1,serial_handshake=None,rts_state=OFF']
+12:44:33 - Attempting _connect to 127.0.0.1:4532
+12:44:33 - IPv4 connect SUCCESS
+12:46:52 - Starting rigctld. Exists: True
+12:46:52 - Started bundled rigctld with args: ['C:\\Users\\chico\\.gemini\\antigravity\\scratch\\CQVoiceKeyer\\rigctld\\rigctld-wsjtx.exe', '-m', '1049', '-r', 'COM4', '-s', '38400', '-t', '4532', '-C', 'data_bits=8,stop_bits=1,serial_handshake=None,rts_state=OFF']
+12:46:52 - Attempting _connect to 127.0.0.1:4532
+12:46:52 - IPv4 connect SUCCESS
+Starting _build_rig_ui thread...
+Functions: {'NB': True, 'NR': False, 'COMP': True, 'VOX': False, 'MON': False, 'ANF': True, 'APF': False}
+Levels: {'RFPOWER': 0.41, 'MICGAIN': 0.67, 'RF': 1.0, 'SQL': 0.0, 'IF': 0.0, 'KEYSPD': 10.0, 'CWPITCH': 700.0}
+12:48:50 - Starting rigctld. Exists: True
+12:48:50 - Started bundled rigctld with args: ['C:\\Users\\chico\\.gemini\\antigravity\\scratch\\CQVoiceKeyer\\rigctld\\rigctld-wsjtx.exe', '-m', '1049', '-r', 'COM4', '-s', '38400', '-t', '4532', '-C', 'data_bits=8,stop_bits=1,serial_handshake=None,rts_state=OFF']
+12:48:50 - Attempting _connect to 127.0.0.1:4532
+12:48:50 - IPv4 connect SUCCESS

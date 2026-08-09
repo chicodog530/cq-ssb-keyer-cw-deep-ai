@@ -34,7 +34,7 @@
         {
             "text": "Freq Clear?",
             "file": "C:/Users/chico/.gemini/antigravity/scratch/CQVoiceKeyer/recordings/Freq_Clear.wav",
-            "tts_text": ""
+            "tts_text": "is this frequncy in use"
         },
         {
             "text": "73' ",
@@ -52,6 +52,6 @@
     "lotw_enable": true,
     "tts_voice_id": "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Speech\\Voices\\Tokens\\TTS_MS_EN-US_DAVID_11.0",
     "tts_send_rst": false,
-    "tts_include_my_call": true,
+    "tts_include_my_call": false,
     "my_callsign": "KE0CGB"
 }

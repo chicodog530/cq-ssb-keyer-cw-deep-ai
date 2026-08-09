@@ -1,9 +1,11 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QComboBox, QPushButton, QFormLayout, QLineEdit, QHBoxLayout, QMessageBox, QGroupBox, QRadioButton, QGridLayout, QSpinBox, QSlider, QCheckBox, QTabWidget
-from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QComboBox, QPushButton, QFormLayout, QLineEdit, QHBoxLayout, QMessageBox, QGroupBox, QRadioButton, QGridLayout, QSpinBox, QSlider, QCheckBox, QTabWidget, QScrollArea
+from PySide6.QtCore import Qt, Signal
 import serial.tools.list_ports
 from rig_control import RigController
 
 class SettingsTab(QWidget):
+    rig_hw_queried = Signal(dict, dict)
+    
     def __init__(self, audio_manager, settings_manager, rig_controller, parent=None):
         super().__init__(parent)
         self.audio_manager = audio_manager
@@ -13,6 +15,8 @@ class SettingsTab(QWidget):
         main_layout = QVBoxLayout(self)
         self.tabs = QTabWidget()
         main_layout.addWidget(self.tabs)
+        
+        self.rig_hw_queried.connect(self._render_rig_hw_tab)
         
         # ==========================================
         # TAB 1: AUDIO & SPEECH
@@ -273,7 +277,6 @@ class SettingsTab(QWidget):
         levels_to_check = ["RFPOWER", "MICGAIN", "RF", "SQL", "IF", "KEYSPD", "CWPITCH"]
         
         import threading
-        from PySide6.QtCore import QTimer
         
         def _build_rig_ui():
             supported_funcs = {}
@@ -288,48 +291,59 @@ class SettingsTab(QWidget):
                 if val is not None:
                     supported_levels[l] = val
                     
-            def _update_ui():
-                # Clear the querying label
-                for i in reversed(range(self.hw_layout.count())): 
-                    widget = self.hw_layout.itemAt(i).widget()
-                    if widget: widget.setParent(None)
-                
-                self.hw_layout.addWidget(QLabel("These settings are queried directly from your radio.\nOnly supported features are shown."))
-                
-                for f, val in supported_funcs.items():
-                    chk = QCheckBox()
-                    chk.setChecked(val)
-                    chk.stateChanged.connect(lambda s, fn=f: self.rig_controller.set_func(fn, bool(s)))
-                    form.addRow(f"{f}:", chk)
-                    
-                for l, val in supported_levels.items():
-                    slider = QSlider(Qt.Horizontal)
-                    slider.setRange(0, 100)
-                    slider.setValue(int(val * 100))
-                    
-                    val_label = QLabel(f"{val:.2f}")
-                    
-                    def on_change(v, lv=l, lbl=val_label):
-                        float_val = v / 100.0
-                        lbl.setText(f"{float_val:.2f}")
-                        self.rig_controller.set_level(lv, float_val)
-                        
-                    slider.valueChanged.connect(on_change)
-                    
-                    row = QHBoxLayout()
-                    row.addWidget(slider)
-                    row.addWidget(val_label)
-                    form.addRow(f"{l}:", row)
-                    
-                if not supported_funcs and not supported_levels:
-                    form.addRow(QLabel("Your radio is connected, but it doesn't seem to support any standard CAT hardware functions/levels."))
-                    
-                scroll.setWidget(container)
-                self.hw_layout.addWidget(scroll)
-                
-            QTimer.singleShot(0, _update_ui)
+            # Emit signal to main thread
+            self.rig_hw_queried.emit(supported_funcs, supported_levels)
             
         threading.Thread(target=_build_rig_ui, daemon=True).start()
+
+    def _render_rig_hw_tab(self, supported_funcs, supported_levels):
+        try:
+            # Clear the querying label
+            for i in reversed(range(self.hw_layout.count())): 
+                widget = self.hw_layout.itemAt(i).widget()
+                if widget: widget.setParent(None)
+            
+            self.hw_layout.addWidget(QLabel("These settings are queried directly from your radio.\nOnly supported features are shown."))
+            
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            container = QWidget()
+            form = QFormLayout(container)
+            
+            for f, val in supported_funcs.items():
+                chk = QCheckBox()
+                chk.setChecked(val)
+                chk.stateChanged.connect(lambda s, fn=f: self.rig_controller.set_func(fn, bool(s)))
+                form.addRow(f"{f}:", chk)
+                
+            for l, val in supported_levels.items():
+                slider = QSlider(Qt.Horizontal)
+                slider.setRange(0, 100)
+                slider.setValue(int(val * 100))
+                
+                val_label = QLabel(f"{val:.2f}")
+                
+                def on_change(v, lv=l, lbl=val_label):
+                    float_val = v / 100.0
+                    lbl.setText(f"{float_val:.2f}")
+                    self.rig_controller.set_level(lv, float_val)
+                    
+                slider.valueChanged.connect(on_change)
+                
+                row = QHBoxLayout()
+                row.addWidget(slider)
+                row.addWidget(val_label)
+                form.addRow(f"{l}:", row)
+                
+            if not supported_funcs and not supported_levels:
+                form.addRow(QLabel("Your radio is connected, but it doesn't seem to support any standard CAT hardware functions/levels."))
+                
+            scroll.setWidget(container)
+            self.hw_layout.addWidget(scroll)
+        except Exception as e:
+            import traceback
+            with open("rigctld_debug.log", "a") as dbg:
+                dbg.write(f"_render_rig_hw_tab Exception: {e}\n{traceback.format_exc()}\n")
 
 
     def on_qrz_toggled(self, state):
