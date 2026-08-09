@@ -28,14 +28,20 @@ def get_band_from_freq(freq_hz):
     return ""
 
 class LogWindow(QDialog):
-    def __init__(self, rig_controller, settings_manager, parent=None):
+    def __init__(self, rig_controller, settings_manager, adif_logger=None, external_uploader=None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Log QSO")
         self.resize(400, 450)
         
         self.rig_controller = rig_controller
         self.settings_manager = settings_manager
-        self.logger = ADIFLogger()
+        
+        if adif_logger:
+            self.logger = adif_logger
+        else:
+            self.logger = ADIFLogger()
+            
+        self.external_uploader = external_uploader
         
         layout = QVBoxLayout(self)
         
@@ -132,7 +138,10 @@ class LogWindow(QDialog):
         }
         
         if self.logger.log_qso(qso_data):
-            QMessageBox.information(self, "Success", "QSO logged successfully.")
+            if self.external_uploader:
+                self.external_uploader.upload_qso(qso_data)
+            
+            QMessageBox.information(self, "Success", "QSO logged successfully to local ADIF file.\nExternal uploads (if enabled) are running in the background.")
             self.accept()
         else:
             QMessageBox.critical(self, "Error", "Failed to write QSO to log.")

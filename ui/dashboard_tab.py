@@ -1,10 +1,16 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QHBoxLayout, QProgressBar, QScrollArea, QMenu, QInputDialog, QFileDialog, QCheckBox, QLineEdit, QSpinBox, QDialog, QGroupBox, QSlider, QGridLayout
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QHBoxLayout, QProgressBar, QScrollArea, QMenu, QInputDialog, QFileDialog, QCheckBox, QLineEdit, QSpinBox, QDialog, QGroupBox, QSlider, QGridLayout, QToolButton, QWidgetAction
 from PySide6.QtCore import QTimer, Qt, Signal
 from PySide6.QtGui import QAction, QPainter, QColor, QPen, QShortcut, QKeySequence, QWheelEvent
 import time
 import os
 import numpy as np
 import datetime
+from PySide6.QtGui import QDesktopServices
+from PySide6.QtCore import QUrl
+import urllib.request
+import xml.etree.ElementTree as ET
+from external_loggers import ExternalLoggerUploader
+from adif_logger import ADIFLogger
 
 class FrequencyWidget(QWidget):
     valueChanged = Signal(int)
@@ -185,9 +191,18 @@ class PresetButton(QPushButton):
             self.dashboard.status_label.setText("Error: Microphone unplugged or invalid!")
             return
             
-        recordings_dir = self.settings_manager.get("recordings_dir", "recordings")
+        recordings_dir = os.path.abspath(self.settings_manager.get("recordings_dir", "recordings"))
         os.makedirs(recordings_dir, exist_ok=True)
-        final_filename = os.path.join(recordings_dir, f"preset_{self.index}.wav")
+        
+        # Propose a default name based on the button's text
+        default_name = self.text().replace(' ', '_').replace('/', '_') + ".wav"
+        default_path = os.path.join(recordings_dir, default_name)
+        
+        file, _ = QFileDialog.getSaveFileName(self, "Save Recording As", default_path, "Audio Files (*.wav)")
+        if not file:
+            return
+            
+        final_filename = file
         temp_filename = final_filename + ".tmp"
         
         if self.dashboard.audio_engine.start_recording(mic_idx, temp_filename):
@@ -273,6 +288,9 @@ class DashboardTab(QWidget):
         self.sequence_manager.state_changed.connect(self.on_sequence_state_changed)
         
         self.last_recording = None
+        self.adif_logger = ADIFLogger()
+        self.external_uploader = ExternalLoggerUploader(self.settings_manager, self.adif_logger)
+        self.external_uploader.upload_status.connect(self.on_upload_status)
         
         layout = QVBoxLayout(self)
         
@@ -335,22 +353,49 @@ class DashboardTab(QWidget):
         self.monitor_checkbox.stateChanged.connect(self.on_monitor_changed)
         controls_row1.addWidget(self.monitor_checkbox)
         
+        # Volume Drop Slider
+        self.vol_btn = QToolButton()
+        vol_val = self.settings_manager.get("monitor_volume", 100)
+        self.vol_btn.setText(f"Vol: {vol_val}%")
+        self.vol_btn.setPopupMode(QToolButton.InstantPopup)
+        self.vol_btn.setStyleSheet("height: 25px; padding: 2px 10px;")
+        vol_menu = QMenu(self)
+        vol_action = QWidgetAction(self)
+        vol_container = QWidget()
+        vol_layout = QVBoxLayout(vol_container)
         self.monitor_vol_slider = QSlider(Qt.Horizontal)
         self.monitor_vol_slider.setRange(0, 100)
-        self.monitor_vol_slider.setValue(self.settings_manager.get("monitor_volume", 100))
-        self.monitor_vol_slider.setMaximumWidth(100)
+        self.monitor_vol_slider.setValue(vol_val)
+        self.monitor_vol_slider.setMinimumWidth(150)
         self.monitor_vol_slider.valueChanged.connect(self.on_monitor_vol_changed)
-        controls_row1.addWidget(QLabel("Vol:"))
-        controls_row1.addWidget(self.monitor_vol_slider)
+        vol_layout.addWidget(QLabel("Monitor Volume:"))
+        vol_layout.addWidget(self.monitor_vol_slider)
+        vol_action.setDefaultWidget(vol_container)
+        vol_menu.addAction(vol_action)
+        self.vol_btn.setMenu(vol_menu)
+        controls_row1.addWidget(self.vol_btn)
         
+        # TX Gain Drop Slider
+        self.tx_gain_btn = QToolButton()
+        tx_val = self.settings_manager.get("tx_gain_db", -6)
+        self.tx_gain_btn.setText(f"TX Gain: {tx_val}dB")
+        self.tx_gain_btn.setPopupMode(QToolButton.InstantPopup)
+        self.tx_gain_btn.setStyleSheet("height: 25px; padding: 2px 10px;")
+        tx_menu = QMenu(self)
+        tx_action = QWidgetAction(self)
+        tx_container = QWidget()
+        tx_layout = QVBoxLayout(tx_container)
         self.tx_gain_slider = QSlider(Qt.Horizontal)
         self.tx_gain_slider.setRange(-30, 0)
-        self.tx_gain_slider.setValue(self.settings_manager.get("tx_gain_db", -6))
-        self.tx_gain_slider.setMaximumWidth(100)
-        self.tx_gain_label = QLabel(f"TX: {self.tx_gain_slider.value()}dB")
+        self.tx_gain_slider.setValue(tx_val)
+        self.tx_gain_slider.setMinimumWidth(150)
         self.tx_gain_slider.valueChanged.connect(self.on_tx_gain_changed)
-        controls_row1.addWidget(self.tx_gain_label)
-        controls_row1.addWidget(self.tx_gain_slider)
+        tx_layout.addWidget(QLabel("TX Audio Gain:"))
+        tx_layout.addWidget(self.tx_gain_slider)
+        tx_action.setDefaultWidget(tx_container)
+        tx_menu.addAction(tx_action)
+        self.tx_gain_btn.setMenu(tx_menu)
+        controls_row1.addWidget(self.tx_gain_btn)
         
         self.btn_record = QPushButton("Record RX")
         self.btn_play = QPushButton("Quick Play RX")
@@ -374,11 +419,15 @@ class DashboardTab(QWidget):
         self.target_call_edit.setMinimumWidth(150)
         self.target_call_edit.setStyleSheet("font-size: 14px; font-weight: bold; height: 28px;")
         
+        self.btn_qrz = QPushButton("QRZ")
+        self.btn_qrz.setStyleSheet("background-color: #000055; font-weight: bold; height: 30px;")
+        
         self.btn_log = QPushButton("LOG")
         self.btn_log.setStyleSheet("background-color: #0000aa; font-weight: bold; height: 30px;")
         self.btn_log.setMinimumWidth(100)
         
         controls_row2.addWidget(self.target_call_edit)
+        controls_row2.addWidget(self.btn_qrz)
         controls_row2.addWidget(self.btn_log)
         controls_row2.addStretch()
         
@@ -391,6 +440,7 @@ class DashboardTab(QWidget):
         
         if self.settings_manager.get("show_tooltips", True):
             self.target_call_edit.setToolTip("Type the callsign of the station you are working here.\nWhen you click LOG, it will automatically fill in the log sheet.")
+            self.btn_qrz.setToolTip("Look up this callsign on QRZ.com")
             self.btn_log.setToolTip("Open the ADIF Log Window to save this contact.")
             self.btn_live_mic.setToolTip("Press and hold to transmit audio directly from your PC Microphone.")
         
@@ -401,6 +451,7 @@ class DashboardTab(QWidget):
         self.btn_test_tone.released.connect(self.on_test_tone_stop)
         self.btn_live_mic.pressed.connect(self.on_live_mic_start)
         self.btn_live_mic.released.connect(self.on_live_mic_stop)
+        self.btn_qrz.clicked.connect(self.on_qrz_lookup)
         self.btn_log.clicked.connect(self.on_log_clicked)
         
         controls_group.setLayout(controls_v_layout)
@@ -511,11 +562,12 @@ class DashboardTab(QWidget):
         
     def on_monitor_vol_changed(self, val):
         self.settings_manager.set("monitor_volume", val)
+        self.vol_btn.setText(f"Vol: {val}%")
         if self.audio_engine.is_monitoring:
             self.audio_engine.monitor_volume = val / 100.0
 
     def on_tx_gain_changed(self, val):
-        self.tx_gain_label.setText(f"TX: {val}dB")
+        self.tx_gain_btn.setText(f"TX Gain: {val}dB")
         self.settings_manager.set("tx_gain_db", val)
 
     def on_monitor_changed(self, state):
@@ -654,12 +706,68 @@ class DashboardTab(QWidget):
             self.rig_controller.set_ptt(False)
         self.status_label.setText("Live Mic Stopped")
 
+    def on_qrz_lookup(self):
+        call = self.target_call_edit.text().strip()
+        if not call:
+            self.status_label.setText("Error: Enter a callsign to lookup")
+            return
+            
+        method = self.settings_manager.get("qrz_lookup_method", "Web Browser (Free)")
+        if "Browser" in method:
+            QDesktopServices.openUrl(QUrl(f"https://www.qrz.com/db/{call}"))
+        else:
+            api_key = self.settings_manager.get("qrz_api_key", "")
+            if not api_key:
+                from PySide6.QtWidgets import QMessageBox
+                QMessageBox.warning(self, "QRZ Error", "No QRZ API Key configured in Settings.")
+                return
+            
+            # Simple async fetch to not block UI
+            import threading
+            def fetch_qrz():
+                try:
+                    url = f"http://xmldata.qrz.com/xml/current/?s={api_key};callsign={call}"
+                    with urllib.request.urlopen(url, timeout=5) as response:
+                        xml_data = response.read()
+                        
+                    root = ET.fromstring(xml_data)
+                    # Use a crude parse for now
+                    session = root.find("{http://xmldata.qrz.com}Session")
+                    if session is not None and session.find("{http://xmldata.qrz.com}Error") is not None:
+                        err = session.find("{http://xmldata.qrz.com}Error").text
+                        self.status_label.setText(f"QRZ Error: {err}")
+                        return
+                        
+                    callsign = root.find("{http://xmldata.qrz.com}Callsign")
+                    if callsign is not None:
+                        fname = callsign.findtext("{http://xmldata.qrz.com}fname", "")
+                        name = callsign.findtext("{http://xmldata.qrz.com}name", "")
+                        qth = callsign.findtext("{http://xmldata.qrz.com}qth", "")
+                        state = callsign.findtext("{http://xmldata.qrz.com}state", "")
+                        country = callsign.findtext("{http://xmldata.qrz.com}country", "")
+                        
+                        full_name = f"{fname} {name}".strip()
+                        location = ", ".join(filter(None, [qth, state, country]))
+                        
+                        from PySide6.QtWidgets import QMessageBox
+                        # This should technically be done via signals to the main thread, 
+                        # but a quick QMessageBox in a worker thread usually works on Windows/PySide if careful.
+                        # It's better to pass it to status for now to avoid cross-thread UI issues.
+                        self.status_label.setText(f"QRZ: {call.upper()} - {full_name} ({location})")
+                except Exception as e:
+                    self.status_label.setText(f"QRZ Lookup Failed: {e}")
+                    
+            threading.Thread(target=fetch_qrz, daemon=True).start()
+
+    def on_upload_status(self, service_name, status_msg):
+        self.status_label.setText(f"{service_name}: {status_msg}")
+
     def on_log_clicked(self):
         # We will import LogWindow here to avoid circular imports if any, or just directly if available
         try:
             from ui.log_window import LogWindow
             target_call = self.target_call_edit.text().strip().upper()
-            log_win = LogWindow(self.rig_controller, self.settings_manager, self)
+            log_win = LogWindow(self.rig_controller, self.settings_manager, self.adif_logger, self.external_uploader, self)
             if target_call:
                 log_win.call_edit.setText(target_call)
                 self.target_call_edit.clear() # Clear it after opening log

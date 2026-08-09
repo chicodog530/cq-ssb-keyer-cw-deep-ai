@@ -124,11 +124,57 @@ class SettingsTab(QWidget):
         delay_layout.addWidget(self.post_roll_spin, 1, 1)
         
         
+        # External Services (QRZ, eQSL, LoTW)
+        ext_group = QGroupBox("External Services & Auto-Logging")
+        ext_layout = QFormLayout(ext_group)
+        
+        self.qrz_enable = QCheckBox("Enable QRZ Logbook Auto-Upload")
+        self.qrz_enable.setChecked(self.settings_manager.get("qrz_enable", False))
+        self.qrz_key = QLineEdit(self.settings_manager.get("qrz_api_key", ""))
+        self.qrz_key.setEchoMode(QLineEdit.PasswordEchoOnEdit)
+        self.qrz_lookup_method = QComboBox()
+        self.qrz_lookup_method.addItems(["Web Browser (Free)", "XML API Popup (Requires Paid Subscription)"])
+        self.qrz_lookup_method.setCurrentText(self.settings_manager.get("qrz_lookup_method", "Web Browser (Free)"))
+        
+        self.eqsl_enable = QCheckBox("Enable eQSL Auto-Upload")
+        self.eqsl_enable.setChecked(self.settings_manager.get("eqsl_enable", False))
+        self.eqsl_user = QLineEdit(self.settings_manager.get("eqsl_user", ""))
+        self.eqsl_pass = QLineEdit(self.settings_manager.get("eqsl_pass", ""))
+        self.eqsl_pass.setEchoMode(QLineEdit.PasswordEchoOnEdit)
+        
+        self.lotw_enable = QCheckBox("Enable LoTW Auto-Upload via TQSL")
+        self.lotw_enable.setChecked(self.settings_manager.get("lotw_enable", False))
+        self.lotw_path = QLineEdit(self.settings_manager.get("lotw_path", "C:\\Program Files (x86)\\TrustedQSL\\tqsl.exe"))
+        
+        ext_layout.addRow(self.qrz_enable)
+        ext_layout.addRow("QRZ Lookup:", self.qrz_lookup_method)
+        ext_layout.addRow("QRZ API Key:", self.qrz_key)
+        
+        ext_layout.addRow(self.eqsl_enable)
+        ext_layout.addRow("eQSL User:", self.eqsl_user)
+        ext_layout.addRow("eQSL Pass:", self.eqsl_pass)
+        
+        ext_layout.addRow(self.lotw_enable)
+        ext_layout.addRow("TQSL.exe Path:", self.lotw_path)
+        
+        # Connect signals
+        self.qrz_enable.stateChanged.connect(self.on_qrz_toggled)
+        self.qrz_key.textChanged.connect(lambda t: self.settings_manager.set("qrz_api_key", t))
+        self.qrz_lookup_method.currentTextChanged.connect(lambda t: self.settings_manager.set("qrz_lookup_method", t))
+        
+        self.eqsl_enable.stateChanged.connect(self.on_eqsl_toggled)
+        self.eqsl_user.textChanged.connect(lambda t: self.settings_manager.set("eqsl_user", t))
+        self.eqsl_pass.textChanged.connect(lambda t: self.settings_manager.set("eqsl_pass", t))
+        
+        self.lotw_enable.stateChanged.connect(self.on_lotw_toggled)
+        self.lotw_path.textChanged.connect(lambda t: self.settings_manager.set("lotw_path", t))
+
         layout.addLayout(form_layout)
         layout.addWidget(self.refresh_btn)
         layout.addLayout(rig_test_layout)
         layout.addWidget(ptt_group)
         layout.addWidget(delay_group)
+        layout.addWidget(ext_group)
 
         layout.addStretch()
         
@@ -140,6 +186,21 @@ class SettingsTab(QWidget):
         self.mic_input_combo.currentIndexChanged.connect(lambda idx: self.settings_manager.set("mic_input_index", self._get_device_index(self.audio_manager.get_input_devices(), idx)))
         self.monitor_output_combo.currentIndexChanged.connect(lambda idx: self.settings_manager.set("monitor_output_index", self._get_device_index(self.audio_manager.get_output_devices(), idx)))
 
+
+    def on_qrz_toggled(self, state):
+        self.settings_manager.set("qrz_enable", bool(state))
+        if state:
+            QMessageBox.information(self, "QRZ Logbook API", "QRZ Logbook auto-upload requires a paid XML Logbook Data subscription from QRZ.com.\n\nEnter your API key below.")
+            
+    def on_eqsl_toggled(self, state):
+        self.settings_manager.set("eqsl_enable", bool(state))
+        if state:
+            QMessageBox.information(self, "eQSL API", "eQSL auto-upload will send your QSOs to eQSL.cc automatically.\n\nEnter your standard username and password below.")
+            
+    def on_lotw_toggled(self, state):
+        self.settings_manager.set("lotw_enable", bool(state))
+        if state:
+            QMessageBox.information(self, "LoTW Uploads (TQSL)", "Logbook of the World requires the ARRL's TrustedQSL (tqsl) software to be installed on this PC.\n\nPlease verify the path to tqsl.exe below.")
 
     def populate_rig_models(self):
         models = RigController.get_models()
