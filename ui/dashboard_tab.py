@@ -4,6 +4,7 @@ from PySide6.QtGui import QAction, QPainter, QColor, QPen, QShortcut, QKeySequen
 import time
 import os
 import numpy as np
+import datetime
 
 class FrequencyWidget(QWidget):
     valueChanged = Signal(int)
@@ -326,18 +327,21 @@ class DashboardTab(QWidget):
         
         # Controls Group
         controls_group = QGroupBox("Manual Controls")
-        controls_layout = QHBoxLayout()
+        controls_v_layout = QVBoxLayout()
+        
+        # Row 1: Audio and TX Controls
+        controls_row1 = QHBoxLayout()
         self.monitor_checkbox = QCheckBox("Monitor RX on PC")
         self.monitor_checkbox.stateChanged.connect(self.on_monitor_changed)
-        controls_layout.addWidget(self.monitor_checkbox)
+        controls_row1.addWidget(self.monitor_checkbox)
         
         self.monitor_vol_slider = QSlider(Qt.Horizontal)
         self.monitor_vol_slider.setRange(0, 100)
         self.monitor_vol_slider.setValue(self.settings_manager.get("monitor_volume", 100))
         self.monitor_vol_slider.setMaximumWidth(100)
         self.monitor_vol_slider.valueChanged.connect(self.on_monitor_vol_changed)
-        controls_layout.addWidget(QLabel("Vol:"))
-        controls_layout.addWidget(self.monitor_vol_slider)
+        controls_row1.addWidget(QLabel("Vol:"))
+        controls_row1.addWidget(self.monitor_vol_slider)
         
         self.tx_gain_slider = QSlider(Qt.Horizontal)
         self.tx_gain_slider.setRange(-30, 0)
@@ -345,23 +349,50 @@ class DashboardTab(QWidget):
         self.tx_gain_slider.setMaximumWidth(100)
         self.tx_gain_label = QLabel(f"TX: {self.tx_gain_slider.value()}dB")
         self.tx_gain_slider.valueChanged.connect(self.on_tx_gain_changed)
-        controls_layout.addWidget(self.tx_gain_label)
-        controls_layout.addWidget(self.tx_gain_slider)
+        controls_row1.addWidget(self.tx_gain_label)
+        controls_row1.addWidget(self.tx_gain_slider)
         
         self.btn_record = QPushButton("Record RX")
-        self.btn_stop = QPushButton("Stop All Audio / TX")
-        self.btn_stop.setStyleSheet("background-color: #aa0000; font-weight: bold; height: 30px;")
         self.btn_play = QPushButton("Quick Play RX")
         self.btn_test_tone = QPushButton("Test Tone (PTT)")
         self.btn_test_tone.setStyleSheet("background-color: #aa5500; font-weight: bold; height: 30px;")
         self.btn_live_mic = QPushButton("Live Mic (PTT)")
         self.btn_live_mic.setStyleSheet("background-color: #007700; font-weight: bold; height: 30px;")
+        self.btn_stop = QPushButton("Stop All Audio / TX")
+        self.btn_stop.setStyleSheet("background-color: #aa0000; font-weight: bold; height: 30px;")
         
-        controls_layout.addWidget(self.btn_record)
-        controls_layout.addWidget(self.btn_play)
-        controls_layout.addWidget(self.btn_test_tone)
-        controls_layout.addWidget(self.btn_live_mic)
-        controls_layout.addWidget(self.btn_stop)
+        controls_row1.addWidget(self.btn_record)
+        controls_row1.addWidget(self.btn_play)
+        controls_row1.addWidget(self.btn_test_tone)
+        controls_row1.addWidget(self.btn_live_mic)
+        controls_row1.addWidget(self.btn_stop)
+        
+        # Row 2: Logging and Clock
+        controls_row2 = QHBoxLayout()
+        self.target_call_edit = QLineEdit()
+        self.target_call_edit.setPlaceholderText("Target Callsign")
+        self.target_call_edit.setMinimumWidth(150)
+        self.target_call_edit.setStyleSheet("font-size: 14px; font-weight: bold; height: 28px;")
+        
+        self.btn_log = QPushButton("LOG")
+        self.btn_log.setStyleSheet("background-color: #0000aa; font-weight: bold; height: 30px;")
+        self.btn_log.setMinimumWidth(100)
+        
+        controls_row2.addWidget(self.target_call_edit)
+        controls_row2.addWidget(self.btn_log)
+        controls_row2.addStretch()
+        
+        self.utc_clock_label = QLabel("00:00:00 UTC")
+        self.utc_clock_label.setStyleSheet("color: #0f0; font-size: 18px; font-family: monospace; font-weight: bold;")
+        controls_row2.addWidget(self.utc_clock_label)
+        
+        controls_v_layout.addLayout(controls_row1)
+        controls_v_layout.addLayout(controls_row2)
+        
+        if self.settings_manager.get("show_tooltips", True):
+            self.target_call_edit.setToolTip("Type the callsign of the station you are working here.\nWhen you click LOG, it will automatically fill in the log sheet.")
+            self.btn_log.setToolTip("Open the ADIF Log Window to save this contact.")
+            self.btn_live_mic.setToolTip("Press and hold to transmit audio directly from your PC Microphone.")
         
         self.btn_record.clicked.connect(self.on_record)
         self.btn_stop.clicked.connect(self.on_stop)
@@ -370,8 +401,9 @@ class DashboardTab(QWidget):
         self.btn_test_tone.released.connect(self.on_test_tone_stop)
         self.btn_live_mic.pressed.connect(self.on_live_mic_start)
         self.btn_live_mic.released.connect(self.on_live_mic_stop)
+        self.btn_log.clicked.connect(self.on_log_clicked)
         
-        controls_group.setLayout(controls_layout)
+        controls_group.setLayout(controls_v_layout)
         layout.addWidget(self.status_label)
         layout.addWidget(controls_group)
         
@@ -622,6 +654,19 @@ class DashboardTab(QWidget):
             self.rig_controller.set_ptt(False)
         self.status_label.setText("Live Mic Stopped")
 
+    def on_log_clicked(self):
+        # We will import LogWindow here to avoid circular imports if any, or just directly if available
+        try:
+            from ui.log_window import LogWindow
+            target_call = self.target_call_edit.text().strip().upper()
+            log_win = LogWindow(self.rig_controller, self.settings_manager, self)
+            if target_call:
+                log_win.call_edit.setText(target_call)
+                self.target_call_edit.clear() # Clear it after opening log
+            log_win.exec_()
+        except Exception as e:
+            self.status_label.setText(f"Error opening Log Window: {e}")
+
     def on_freq_timer_expired(self):
         freq_hz = self.freq_widget.freq_hz
         if self.rig_controller.connected:
@@ -633,6 +678,10 @@ class DashboardTab(QWidget):
             self.status_label.setText("Cannot set frequency: Rig disconnected.")
 
     def update_ui(self):
+        # Update UTC Clock
+        now_utc = datetime.datetime.now(datetime.timezone.utc)
+        self.utc_clock_label.setText(now_utc.strftime("%H:%M:%S UTC"))
+        
         # Update Audio Scopes
         self.rx_scope.update_buffer(self.audio_engine.scope_data_rx)
         self.tx_scope.update_buffer(self.audio_engine.scope_data_tx)

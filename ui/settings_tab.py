@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QComboBox, QPushButton, QFormLayout, QLineEdit, QHBoxLayout, QMessageBox, QGroupBox, QRadioButton, QGridLayout, QSpinBox, QSlider
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QComboBox, QPushButton, QFormLayout, QLineEdit, QHBoxLayout, QMessageBox, QGroupBox, QRadioButton, QGridLayout, QSpinBox, QSlider, QCheckBox
 from PySide6.QtCore import Qt
 import serial.tools.list_ports
 from rig_control import RigController
@@ -13,6 +13,12 @@ class SettingsTab(QWidget):
         layout = QVBoxLayout(self)
         
         form_layout = QFormLayout()
+        
+        # General Settings
+        self.show_tooltips_check = QCheckBox("Show Helpful Tooltips")
+        self.show_tooltips_check.setChecked(self.settings_manager.get("show_tooltips", True))
+        self.show_tooltips_check.stateChanged.connect(lambda s: self.settings_manager.set("show_tooltips", bool(s)))
+        form_layout.addRow("UI:", self.show_tooltips_check)
         
         # Audio Settings
         self.rx_input_combo = QComboBox()
