@@ -354,10 +354,13 @@ class DashboardTab(QWidget):
         self.btn_play = QPushButton("Quick Play RX")
         self.btn_test_tone = QPushButton("Test Tone (PTT)")
         self.btn_test_tone.setStyleSheet("background-color: #aa5500; font-weight: bold; height: 30px;")
+        self.btn_live_mic = QPushButton("Live Mic (PTT)")
+        self.btn_live_mic.setStyleSheet("background-color: #007700; font-weight: bold; height: 30px;")
         
         controls_layout.addWidget(self.btn_record)
         controls_layout.addWidget(self.btn_play)
         controls_layout.addWidget(self.btn_test_tone)
+        controls_layout.addWidget(self.btn_live_mic)
         controls_layout.addWidget(self.btn_stop)
         
         self.btn_record.clicked.connect(self.on_record)
@@ -365,6 +368,8 @@ class DashboardTab(QWidget):
         self.btn_play.clicked.connect(self.on_play)
         self.btn_test_tone.pressed.connect(self.on_test_tone_start)
         self.btn_test_tone.released.connect(self.on_test_tone_stop)
+        self.btn_live_mic.pressed.connect(self.on_live_mic_start)
+        self.btn_live_mic.released.connect(self.on_live_mic_stop)
         
         controls_group.setLayout(controls_layout)
         layout.addWidget(self.status_label)
@@ -590,6 +595,32 @@ class DashboardTab(QWidget):
         if self.rig_controller.connected:
             self.rig_controller.set_ptt(False)
         self.status_label.setText("Stopped Test Tone")
+
+    def on_live_mic_start(self):
+        mic_idx = self.settings_manager.get("mic_input_index")
+        tx_idx = self.settings_manager.get("tx_output_index")
+        if mic_idx is None or tx_idx is None:
+            self.status_label.setText("Error: Select Mic Input and TX Output in Settings")
+            return
+            
+        if not self.audio_engine.is_device_valid(mic_idx, 'input') or not self.audio_engine.is_device_valid(tx_idx, 'output'):
+            self.status_label.setText("Error: Devices unplugged or invalid!")
+            return
+            
+        if not self.rig_controller.connected:
+            self.status_label.setText("Error: Rig disconnected")
+            return
+            
+        if self.rig_controller.set_ptt(True):
+            self.status_label.setText("Live Mic: Transmitting...")
+            tx_gain_db = self.settings_manager.get("tx_gain_db", -6)
+            self.audio_engine.start_live_mic(mic_idx, tx_idx, tx_gain_db)
+            
+    def on_live_mic_stop(self):
+        self.audio_engine.stop_live_mic()
+        if self.rig_controller.connected:
+            self.rig_controller.set_ptt(False)
+        self.status_label.setText("Live Mic Stopped")
 
     def on_freq_timer_expired(self):
         freq_hz = self.freq_widget.freq_hz

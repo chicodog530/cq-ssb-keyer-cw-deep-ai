@@ -12,7 +12,9 @@ class AudioEngine:
         self.is_recording = False
         self.is_playing = False
         self.is_monitoring = False
+        self.is_live_mic = False
         self.monitor_volume = 1.0
+        self.live_mic_stream = None
         
         self.audio_queue = queue.Queue()
         self.worker_thread = None
@@ -297,6 +299,76 @@ class AudioEngine:
                 print(f"Error aborting stream: {e}")
             try:
                 self.monitor_stream.close()
-            except Exception as e:
-                print(f"Error closing stream: {e}")
+            except:
+                pass
             self.monitor_stream = None
+
+    def start_live_mic(self, mic_device, tx_device, tx_gain_db=0):
+        if self.is_recording or self.is_playing or getattr(self, 'is_live_mic', False):
+            return False
+            
+        self.is_live_mic = True
+        
+        try:
+            device_info = sd.query_devices(mic_device, 'input')
+            samplerate = int(device_info['default_samplerate'])
+            
+            tx_info = sd.query_devices(tx_device, 'output')
+            out_channels = min(2, tx_info['max_output_channels'])
+            
+            linear_gain = 10 ** (tx_gain_db / 20.0)
+            clip_limit = 0.89125
+            
+            def callback(indata, outdata, frames, time, status):
+                if status:
+                    print(status)
+                
+                # Apply TX Gain
+                processed = indata * linear_gain
+                
+                # Hard Clip Guard
+                processed = np.clip(processed, -clip_limit, clip_limit)
+                
+                # Mono to Stereo duplication if required
+                if len(processed.shape) > 1:
+                    processed = processed[:, 0].reshape(-1, 1)
+                else:
+                    processed = processed.reshape(-1, 1)
+                    
+                if out_channels == 2:
+                    processed = np.column_stack((processed, processed))
+                
+                outdata[:] = processed
+                
+                # Metering post-gain
+                peak = np.max(np.abs(processed))
+                self.current_peak = peak
+                if peak >= clip_limit - 0.01:
+                    self.is_clipping = True
+                
+                # Scope Update (use channel 0)
+                if len(outdata) >= 512:
+                    self.scope_data_tx[:] = outdata[-512:, 0]
+                else:
+                    self.scope_data_tx[:-len(outdata)] = self.scope_data_tx[len(outdata):]
+                    self.scope_data_tx[-len(outdata):] = outdata[:, 0]
+
+            self.live_mic_stream = sd.Stream(device=(mic_device, tx_device),
+                                            samplerate=samplerate, channels=(1, out_channels),
+                                            callback=callback)
+            self.live_mic_stream.start()
+            return True
+        except Exception as e:
+            print(f"Error starting live mic stream: {e}")
+            self.is_live_mic = False
+            return False
+
+    def stop_live_mic(self):
+        self.is_live_mic = False
+        if hasattr(self, 'live_mic_stream') and self.live_mic_stream:
+            try:
+                self.live_mic_stream.abort()
+                self.live_mic_stream.close()
+            except:
+                pass
+            self.live_mic_stream = None
