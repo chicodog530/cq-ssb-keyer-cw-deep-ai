@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QComboBox, QPushButton, QFormLayout, QLineEdit, QHBoxLayout, QMessageBox, QGroupBox, QRadioButton, QGridLayout, QSpinBox, QSlider, QCheckBox
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QComboBox, QPushButton, QFormLayout, QLineEdit, QHBoxLayout, QMessageBox, QGroupBox, QRadioButton, QGridLayout, QSpinBox, QSlider, QCheckBox, QTabWidget
 from PySide6.QtCore import Qt
 import serial.tools.list_ports
 from rig_control import RigController
@@ -10,17 +10,16 @@ class SettingsTab(QWidget):
         self.settings_manager = settings_manager
         self.rig_controller = rig_controller
         
-        layout = QVBoxLayout(self)
+        main_layout = QVBoxLayout(self)
+        self.tabs = QTabWidget()
+        main_layout.addWidget(self.tabs)
         
-        form_layout = QFormLayout()
+        # ==========================================
+        # TAB 1: AUDIO & SPEECH
+        # ==========================================
+        audio_tab = QWidget()
+        audio_layout = QFormLayout(audio_tab)
         
-        # General Settings
-        self.show_tooltips_check = QCheckBox("Show Helpful Tooltips")
-        self.show_tooltips_check.setChecked(self.settings_manager.get("show_tooltips", True))
-        self.show_tooltips_check.stateChanged.connect(lambda s: self.settings_manager.set("show_tooltips", bool(s)))
-        form_layout.addRow("UI:", self.show_tooltips_check)
-        
-        # Audio Settings
         self.rx_input_combo = QComboBox()
         self.tx_output_combo = QComboBox()
         self.mic_input_combo = QComboBox()
@@ -29,12 +28,50 @@ class SettingsTab(QWidget):
         self.refresh_btn = QPushButton("Refresh Devices")
         self.refresh_btn.clicked.connect(self.populate_devices)
         
-        form_layout.addRow("Radio RX Input:", self.rx_input_combo)
-        form_layout.addRow("Radio TX Output:", self.tx_output_combo)
-        form_layout.addRow("Microphone Input:", self.mic_input_combo)
-        form_layout.addRow("Monitor Output:", self.monitor_output_combo)
+        audio_layout.addRow("Radio RX Input:", self.rx_input_combo)
+        audio_layout.addRow("Radio TX Output:", self.tx_output_combo)
+        audio_layout.addRow("Microphone Input:", self.mic_input_combo)
+        audio_layout.addRow("Monitor Output:", self.monitor_output_combo)
         
-        # Rig Settings
+        self.tts_voice_combo = QComboBox()
+        
+        try:
+            import pyttsx3
+            engine = pyttsx3.init()
+            tts_voices = [(v.id, v.name) for v in engine.getProperty('voices')]
+        except:
+            tts_voices = []
+            
+        for vid, vname in tts_voices:
+            self.tts_voice_combo.addItem(vname, vid)
+            
+        current_voice = self.settings_manager.get("tts_voice_id")
+        if current_voice:
+            idx = self.tts_voice_combo.findData(current_voice)
+            if idx >= 0:
+                self.tts_voice_combo.setCurrentIndex(idx)
+                
+        self.tts_voice_combo.currentIndexChanged.connect(
+            lambda idx: self.settings_manager.set("tts_voice_id", self.tts_voice_combo.itemData(idx))
+        )
+        
+        self.tts_rate_spin = QSpinBox()
+        self.tts_rate_spin.setRange(50, 400)
+        self.tts_rate_spin.setValue(self.settings_manager.get("tts_rate", 150))
+        self.tts_rate_spin.valueChanged.connect(lambda v: self.settings_manager.set("tts_rate", v))
+        
+        audio_layout.addRow("TTS Voice:", self.tts_voice_combo)
+        audio_layout.addRow("TTS Speed (WPM):", self.tts_rate_spin)
+        audio_layout.addRow("", self.refresh_btn)
+        
+        self.tabs.addTab(audio_tab, "Audio & Speech")
+        
+        # ==========================================
+        # TAB 2: RADIO CONTROL
+        # ==========================================
+        radio_tab = QWidget()
+        radio_layout = QFormLayout(radio_tab)
+        
         self.rig_model_combo = QComboBox()
         self.populate_rig_models()
         
@@ -75,16 +112,15 @@ class SettingsTab(QWidget):
         self.rig_dtr_combo.currentTextChanged.connect(lambda t: self.settings_manager.set("rig_dtr", t))
         self.rig_rts_combo.currentTextChanged.connect(lambda t: self.settings_manager.set("rig_rts", t))
         
-        form_layout.addRow("Rigctld Model:", self.rig_model_combo)
-        form_layout.addRow("Rigctld COM Port:", self.rig_com_combo)
-        form_layout.addRow("Rigctld Baud Rate:", self.rig_baud_combo)
-        form_layout.addRow("Data Bits:", self.rig_data_bits_combo)
-        form_layout.addRow("Stop Bits:", self.rig_stop_bits_combo)
-        form_layout.addRow("Handshake:", self.rig_handshake_combo)
-        form_layout.addRow("DTR:", self.rig_dtr_combo)
-        form_layout.addRow("RTS:", self.rig_rts_combo)
+        radio_layout.addRow("Rigctld Model:", self.rig_model_combo)
+        radio_layout.addRow("Rigctld COM Port:", self.rig_com_combo)
+        radio_layout.addRow("Rigctld Baud Rate:", self.rig_baud_combo)
+        radio_layout.addRow("Data Bits:", self.rig_data_bits_combo)
+        radio_layout.addRow("Stop Bits:", self.rig_stop_bits_combo)
+        radio_layout.addRow("Handshake:", self.rig_handshake_combo)
+        radio_layout.addRow("DTR:", self.rig_dtr_combo)
+        radio_layout.addRow("RTS:", self.rig_rts_combo)
         
-        # Rig Test Buttons
         rig_test_layout = QHBoxLayout()
         self.btn_test_cat = QPushButton("Test CAT")
         self.btn_test_ptt = QPushButton("Test PTT")
@@ -95,8 +131,8 @@ class SettingsTab(QWidget):
         
         rig_test_layout.addWidget(self.btn_test_cat)
         rig_test_layout.addWidget(self.btn_test_ptt)
+        radio_layout.addRow("Test Controls:", rig_test_layout)
         
-        # PTT Method (Placeholder UI, hardcoded to CAT for now)
         ptt_group = QGroupBox("PTT Method")
         ptt_layout = QGridLayout(ptt_group)
         ptt_layout.addWidget(QRadioButton("VOX"), 0, 0)
@@ -105,8 +141,8 @@ class SettingsTab(QWidget):
         ptt_layout.addWidget(cat_btn, 1, 0)
         ptt_layout.addWidget(QRadioButton("DTR"), 0, 1)
         ptt_layout.addWidget(QRadioButton("RTS"), 1, 1)
+        radio_layout.addRow(ptt_group)
         
-        # Sequence Delays
         delay_group = QGroupBox("Sequence Delays")
         delay_layout = QGridLayout(delay_group)
         delay_layout.addWidget(QLabel("Pre-Roll (ms):"), 0, 0)
@@ -122,11 +158,15 @@ class SettingsTab(QWidget):
         self.post_roll_spin.setValue(self.settings_manager.get("tx_post_roll_ms", 100))
         self.post_roll_spin.valueChanged.connect(lambda v: self.settings_manager.set("tx_post_roll_ms", v))
         delay_layout.addWidget(self.post_roll_spin, 1, 1)
+        radio_layout.addRow(delay_group)
         
+        self.tabs.addTab(radio_tab, "Radio Control")
         
-        # External Services (QRZ, eQSL, LoTW)
-        ext_group = QGroupBox("External Services & Auto-Logging")
-        ext_layout = QFormLayout(ext_group)
+        # ==========================================
+        # TAB 3: LOGGING & SERVICES
+        # ==========================================
+        log_tab = QWidget()
+        log_layout = QFormLayout(log_tab)
         
         self.qrz_enable = QCheckBox("Enable QRZ Logbook Auto-Upload")
         self.qrz_enable.setChecked(self.settings_manager.get("qrz_enable", False))
@@ -146,16 +186,16 @@ class SettingsTab(QWidget):
         self.lotw_enable.setChecked(self.settings_manager.get("lotw_enable", False))
         self.lotw_path = QLineEdit(self.settings_manager.get("lotw_path", "C:\\Program Files (x86)\\TrustedQSL\\tqsl.exe"))
         
-        ext_layout.addRow(self.qrz_enable)
-        ext_layout.addRow("QRZ Lookup:", self.qrz_lookup_method)
-        ext_layout.addRow("QRZ API Key:", self.qrz_key)
+        log_layout.addRow(self.qrz_enable)
+        log_layout.addRow("QRZ Lookup:", self.qrz_lookup_method)
+        log_layout.addRow("QRZ API Key:", self.qrz_key)
         
-        ext_layout.addRow(self.eqsl_enable)
-        ext_layout.addRow("eQSL User:", self.eqsl_user)
-        ext_layout.addRow("eQSL Pass:", self.eqsl_pass)
+        log_layout.addRow(self.eqsl_enable)
+        log_layout.addRow("eQSL User:", self.eqsl_user)
+        log_layout.addRow("eQSL Pass:", self.eqsl_pass)
         
-        ext_layout.addRow(self.lotw_enable)
-        ext_layout.addRow("TQSL.exe Path:", self.lotw_path)
+        log_layout.addRow(self.lotw_enable)
+        log_layout.addRow("TQSL.exe Path:", self.lotw_path)
         
         # Connect signals
         self.qrz_enable.stateChanged.connect(self.on_qrz_toggled)
@@ -168,15 +208,21 @@ class SettingsTab(QWidget):
         
         self.lotw_enable.stateChanged.connect(self.on_lotw_toggled)
         self.lotw_path.textChanged.connect(lambda t: self.settings_manager.set("lotw_path", t))
-
-        layout.addLayout(form_layout)
-        layout.addWidget(self.refresh_btn)
-        layout.addLayout(rig_test_layout)
-        layout.addWidget(ptt_group)
-        layout.addWidget(delay_group)
-        layout.addWidget(ext_group)
-
-        layout.addStretch()
+        
+        self.tabs.addTab(log_tab, "Logging & Services")
+        
+        # ==========================================
+        # TAB 4: GENERAL
+        # ==========================================
+        gen_tab = QWidget()
+        gen_layout = QFormLayout(gen_tab)
+        
+        self.show_tooltips_check = QCheckBox("Show Helpful Tooltips")
+        self.show_tooltips_check.setChecked(self.settings_manager.get("show_tooltips", True))
+        self.show_tooltips_check.stateChanged.connect(lambda s: self.settings_manager.set("show_tooltips", bool(s)))
+        gen_layout.addRow("UI Options:", self.show_tooltips_check)
+        
+        self.tabs.addTab(gen_tab, "General")
         
         self.populate_devices()
         

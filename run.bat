@@ -1,19 +1,10 @@
 @echo off
-setlocal
-
-cd /d "%~dp0"
-
-if not exist ".venv\Scripts\activate.bat" (
-    echo Virtual environment not found. Please wait while it is created...
-    python -m venv .venv
-    call .venv\Scripts\activate.bat
-    echo Installing dependencies...
-    pip install -r requirements.txt
-) else (
-    call .venv\Scripts\activate.bat
+if not exist ".venv" (
+    echo [ERROR] Virtual environment not found. Please run installer.bat first!
+    pause
+    exit /b 1
 )
 
-echo Starting Universal Radio Audio Recorder and CQ Voice Keyer...
+echo Starting CQ Voice Keyer...
+call .venv\Scripts\activate
 python main.py
-
-endlocal

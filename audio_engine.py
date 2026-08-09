@@ -4,6 +4,17 @@ import numpy as np
 import threading
 import queue
 import time
+import os
+
+ITU_PHONETICS = {
+    'A': 'Alpha', 'B': 'Bravo', 'C': 'Charlie', 'D': 'Delta', 'E': 'Echo',
+    'F': 'Foxtrot', 'G': 'Golf', 'H': 'Hotel', 'I': 'India', 'J': 'Juliet',
+    'K': 'Kilo', 'L': 'Lima', 'M': 'Mike', 'N': 'November', 'O': 'Oscar',
+    'P': 'Papa', 'Q': 'Quebec', 'R': 'Romeo', 'S': 'Sierra', 'T': 'Tango',
+    'U': 'Uniform', 'V': 'Victor', 'W': 'Whiskey', 'X': 'X-ray', 'Y': 'Yankee',
+    'Z': 'Zulu', '0': 'Zero', '1': 'One', '2': 'Two', '3': 'Three',
+    '4': 'Four', '5': 'Five', '6': 'Six', '7': 'Seven', '8': 'Eight', '9': 'Nine'
+}
 
 class AudioEngine:
     def __init__(self):
@@ -372,3 +383,54 @@ class AudioEngine:
             except:
                 pass
             self.live_mic_stream = None
+
+    def get_tts_voices(self):
+        try:
+            import pyttsx3
+            engine = pyttsx3.init()
+            return [(v.id, v.name) for v in engine.getProperty('voices')]
+        except:
+            return []
+
+    def generate_tts_wav(self, callsign, rst, filepath, custom_text=None, voice_id=None, rate=150):
+        import pyttsx3
+        engine = pyttsx3.init()
+        
+        if voice_id:
+            try:
+                engine.setProperty('voice', voice_id)
+            except:
+                pass
+        else:
+            # Try to find a good female voice or default to system default
+            voices = engine.getProperty('voices')
+            for voice in voices:
+                if "Zira" in voice.name or "Female" in voice.name:
+                    engine.setProperty('voice', voice.id)
+                    break
+                
+        # Set speech rate
+        engine.setProperty('rate', rate)
+        
+        if custom_text:
+            text_to_speak = custom_text
+        else:
+            # Create phonetic callsign
+            phonetic_call = []
+            for char in callsign.upper():
+                if char in ITU_PHONETICS:
+                    phonetic_call.append(ITU_PHONETICS[char])
+                elif char.strip():
+                    phonetic_call.append(char)
+                    
+            spoken_call = " ".join(phonetic_call)
+            
+            # RST characters should be spoken as individual digits
+            spoken_rst = " ".join(list(str(rst)))
+            
+            text_to_speak = f"{spoken_call}, you are {spoken_rst}."
+            
+        engine.save_to_file(text_to_speak, filepath)
+        engine.runAndWait()
+        
+        return True

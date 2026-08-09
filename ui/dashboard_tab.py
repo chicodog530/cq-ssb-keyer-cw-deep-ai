@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QHBoxLayout, QProgressBar, QScrollArea, QMenu, QInputDialog, QFileDialog, QCheckBox, QLineEdit, QSpinBox, QDialog, QGroupBox, QSlider, QGridLayout, QToolButton, QWidgetAction
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QHBoxLayout, QProgressBar, QScrollArea, QMenu, QInputDialog, QFileDialog, QCheckBox, QLineEdit, QSpinBox, QDialog, QGroupBox, QSlider, QGridLayout, QToolButton, QWidgetAction, QComboBox
 from PySide6.QtCore import QTimer, Qt, Signal
 from PySide6.QtGui import QAction, QPainter, QColor, QPen, QShortcut, QKeySequence, QWheelEvent
 import time
@@ -194,8 +194,10 @@ class PresetButton(QPushButton):
         recordings_dir = os.path.abspath(self.settings_manager.get("recordings_dir", "recordings"))
         os.makedirs(recordings_dir, exist_ok=True)
         
-        # Propose a default name based on the button's text
-        default_name = self.text().replace(' ', '_').replace('/', '_') + ".wav"
+        # Propose a default name based on the button's text (strip invalid Windows characters)
+        import re
+        clean_text = re.sub(r'[\\/*?:"<>|]', '', self.text())
+        default_name = clean_text.replace(' ', '_') + ".wav"
         default_path = os.path.join(recordings_dir, default_name)
         
         file, _ = QFileDialog.getSaveFileName(self, "Save Recording As", default_path, "Audio Files (*.wav)")
@@ -299,7 +301,14 @@ class DashboardTab(QWidget):
         rig_layout = QHBoxLayout()
         self.rig_conn_label = QLabel("Rig: Disconnected")
         self.rig_freq_label = QLabel("Freq: ---")
-        self.rig_mode_label = QLabel("Mode: ---")
+        
+        mode_layout = QHBoxLayout()
+        mode_layout.addWidget(QLabel("Mode:"))
+        self.rig_mode_combo = QComboBox()
+        self.rig_mode_combo.addItems(["LSB", "USB", "CW", "CWR", "AM", "FM", "PKTUSB", "PKTLSB", "RTTY", "RTTYR"])
+        self.rig_mode_combo.currentTextChanged.connect(self.on_mode_combo_changed)
+        mode_layout.addWidget(self.rig_mode_combo)
+        
         self.rig_ptt_label = QLabel("PTT: OFF")
         
         self.freq_widget = FrequencyWidget()
@@ -310,7 +319,7 @@ class DashboardTab(QWidget):
         
         rig_layout.addWidget(self.rig_conn_label)
         rig_layout.addWidget(self.rig_freq_label)
-        rig_layout.addWidget(self.rig_mode_label)
+        rig_layout.addLayout(mode_layout)
         rig_layout.addWidget(self.rig_ptt_label)
         rig_layout.addWidget(self.freq_widget)
         
@@ -435,8 +444,33 @@ class DashboardTab(QWidget):
         self.utc_clock_label.setStyleSheet("color: #0f0; font-size: 18px; font-family: monospace; font-weight: bold;")
         controls_row2.addWidget(self.utc_clock_label)
         
+        # Row 3: TTS Exchange
+        controls_row3 = QHBoxLayout()
+        self.tts_checkbox = QCheckBox("TTS Voice Keyer")
+        self.tts_checkbox.setChecked(False)
+        
+        self.tts_rst_edit = QLineEdit()
+        self.tts_rst_edit.setPlaceholderText("RST (e.g. 59)")
+        self.tts_rst_edit.setText("59")
+        self.tts_rst_edit.setMaximumWidth(60)
+        
+        self.tts_custom_edit = QLineEdit()
+        self.tts_custom_edit.setPlaceholderText("Custom Msg (Overrides Callsign)")
+        self.tts_custom_edit.setMinimumWidth(150)
+        
+        self.btn_send_exchange = QPushButton("Send Exchange")
+        self.btn_send_exchange.setStyleSheet("background-color: #660066; font-weight: bold; height: 30px;")
+        self.btn_send_exchange.clicked.connect(self.on_send_exchange_clicked)
+        
+        controls_row3.addWidget(self.tts_checkbox)
+        controls_row3.addWidget(self.tts_rst_edit)
+        controls_row3.addWidget(self.tts_custom_edit)
+        controls_row3.addWidget(self.btn_send_exchange)
+        controls_row3.addStretch()
+        
         controls_v_layout.addLayout(controls_row1)
         controls_v_layout.addLayout(controls_row2)
+        controls_v_layout.addLayout(controls_row3)
         
         if self.settings_manager.get("show_tooltips", True):
             self.target_call_edit.setToolTip("Type the callsign of the station you are working here.\nWhen you click LOG, it will automatically fill in the log sheet.")
@@ -566,6 +600,11 @@ class DashboardTab(QWidget):
         if self.audio_engine.is_monitoring:
             self.audio_engine.monitor_volume = val / 100.0
 
+    def on_mode_combo_changed(self, mode):
+        if self.rig_controller.connected:
+            import threading
+            threading.Thread(target=self.rig_controller.set_mode, args=(mode,), daemon=True).start()
+
     def on_tx_gain_changed(self, val):
         self.tx_gain_btn.setText(f"TX Gain: {val}dB")
         self.settings_manager.set("tx_gain_db", val)
@@ -627,6 +666,54 @@ class DashboardTab(QWidget):
         self.status_label.setText("Stopped by User")
         self.btn_record.setEnabled(True)
         
+    def on_send_exchange_clicked(self):
+        if not self.tts_checkbox.isChecked():
+            self.status_label.setText("Enable the 'TTS Voice Keyer' checkbox first.")
+            return
+            
+        call = self.target_call_edit.text().strip()
+        rst = self.tts_rst_edit.text().strip()
+        custom = self.tts_custom_edit.text().strip()
+        
+        if not custom and not call:
+            self.status_label.setText("No target callsign or custom message to speak.")
+            return
+            
+        tx_idx = self.settings_manager.get("tx_output_index")
+        if tx_idx is None:
+            self.status_label.setText("Error: Select TX Output in Settings first")
+            return
+            
+        if not self.audio_engine.is_device_valid(tx_idx, 'output'):
+            self.status_label.setText("Error: TX output device unplugged or invalid!")
+            return
+            
+        import tempfile
+        import os
+        temp_wav = os.path.join(tempfile.gettempdir(), "tts_exchange.wav")
+        
+        try:
+            voice_id = self.settings_manager.get("tts_voice_id")
+            rate = self.settings_manager.get("tts_rate", 150)
+            self.audio_engine.generate_tts_wav(call, rst, temp_wav, custom_text=custom, voice_id=voice_id, rate=rate)
+        except Exception as e:
+            self.status_label.setText(f"Error generating TTS: {e}")
+            return
+            
+        # Ensure file was generated
+        if not os.path.exists(temp_wav):
+            self.status_label.setText("Failed to generate TTS audio file.")
+            return
+            
+        # Key the radio and play the sequence via State Machine
+        self.sequence_manager.start_sequence(
+            temp_wav,
+            repeat_enabled=False,
+            max_repeats=0,
+            repeat_interval_ms=0
+        )
+        self.status_label.setText("Sending TTS Exchange...")
+
     def on_play(self):
         if not self.last_recording or not os.path.exists(self.last_recording):
             self.status_label.setText("No recent recording to play")
@@ -808,7 +895,13 @@ class DashboardTab(QWidget):
         if self.rig_controller.connected:
             self.rig_conn_label.setText(f"Rig: Connected ({self.settings_manager.get('rig_model')})")
             self.rig_freq_label.setText(f"Freq: {self.rig_controller.frequency}")
-            self.rig_mode_label.setText(f"Mode: {self.rig_controller.mode}")
+            
+            if self.rig_controller.mode and self.rig_controller.mode != self.rig_mode_combo.currentText():
+                self.rig_mode_combo.blockSignals(True)
+                if self.rig_mode_combo.findText(self.rig_controller.mode) == -1:
+                    self.rig_mode_combo.addItem(self.rig_controller.mode)
+                self.rig_mode_combo.setCurrentText(self.rig_controller.mode)
+                self.rig_mode_combo.blockSignals(False)
             self.rig_ptt_label.setText(f"PTT: {'TX' if self.rig_controller.ptt_state else 'RX'}")
             if self.rig_controller.ptt_state:
                 self.rig_ptt_label.setStyleSheet("color: red; font-weight: bold;")
@@ -824,9 +917,36 @@ class DashboardTab(QWidget):
             except:
                 pass
                 
-        else:
+        if not self.rig_controller.connected:
             self.rig_conn_label.setText("Rig: Disconnected")
+            if self.rig_controller.last_error:
+                self.rig_conn_label.setText(f"Rig Error: {self.rig_controller.last_error}")
             self.rig_freq_label.setText("Freq: ---")
-            self.rig_mode_label.setText("Mode: ---")
-            self.rig_ptt_label.setText("PTT: ---")
-            self.rig_ptt_label.setStyleSheet("color: #aaa;")
+            self.rig_ptt_label.setText("PTT: OFF")
+            self.freq_widget.freq_hz = 0
+            self.freq_widget.update_display()
+            
+            # Disable mode combo if disconnected
+            if self.rig_mode_combo.isEnabled():
+                self.rig_mode_combo.setEnabled(False)
+        else:
+            self.rig_conn_label.setText(f"Rig: Connected ({self.settings_manager.get('rig_model')})")
+            
+            if not self.rig_mode_combo.isEnabled():
+                self.rig_mode_combo.setEnabled(True)
+                
+            if self.rig_controller.mode and self.rig_controller.mode != self.rig_mode_combo.currentText():
+                self.rig_mode_combo.blockSignals(True)
+                if self.rig_mode_combo.findText(self.rig_controller.mode) == -1:
+                    self.rig_mode_combo.addItem(self.rig_controller.mode)
+                self.rig_mode_combo.setCurrentText(self.rig_controller.mode)
+                self.rig_mode_combo.blockSignals(False)
+                
+            self.rig_freq_label.setText(f"Freq: {self.rig_controller.frequency}")
+            
+            if self.rig_controller.ptt_state:
+                self.rig_ptt_label.setText("PTT: TX")
+                self.rig_ptt_label.setStyleSheet("color: #f00; font-weight: bold;")
+            else:
+                self.rig_ptt_label.setText("PTT: RX")
+                self.rig_ptt_label.setStyleSheet("color: #888;")

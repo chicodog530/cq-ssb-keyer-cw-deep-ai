@@ -252,3 +252,11 @@ class RigController:
                 return True
             return False
 
+    def set_mode(self, mode_str):
+        with self._lock:
+            res = self._send_cmd(f"M {mode_str} 0")
+            if res == "RPRT 0":
+                self.mode = mode_str
+                return True
+            return False
+

@@ -13,11 +13,11 @@
     "presets": [
         {
             "text": "General CQ",
-            "file": "C:/Users/chico/.gemini/antigravity/scratch/CQVoiceKeyer/recordings/preset_0.wav"
+            "file": "C:/Users/chico/.gemini/antigravity/scratch/CQVoiceKeyer/recordings/General_CQ.wav"
         },
         {
             "text": "POTA CQ",
-            "file": "C:/Users/chico/.gemini/antigravity/scratch/CQVoiceKeyer/recordings/RX_20260809-005952.wav"
+            "file": "C:/Users/chico/.gemini/antigravity/scratch/CQVoiceKeyer/recordings/POTA_CQ.wav"
         },
         {
             "text": "Station ID",
@@ -25,11 +25,11 @@
         },
         {
             "text": "Name, City & State",
-            "file": ""
+            "file": "C:/Users/chico/.gemini/antigravity/scratch/CQVoiceKeyer/recordings/Name,_City_&_State.wav"
         },
         {
-            "text": "New Preset 5",
-            "file": ""
+            "text": "Freq Clear?",
+            "file": "C:/Users/chico/.gemini/antigravity/scratch/CQVoiceKeyer/recordings/Freq_Clear.wav"
         },
         {
             "text": "New Preset 6",
@@ -37,14 +37,16 @@
         },
         {
             "text": "dumbshit",
-            "file": "C:/Users/chico/.gemini/antigravity/scratch/CQVoiceKeyer/recordings/RX_20260809-010633.wav"
+            "file": "C:/Users/chico/.gemini/antigravity/scratch/CQVoiceKeyer/recordings/preset_6.wav"
         },
         {
             "text": "New Preset 8",
-            "file": "C:/Users/chico/.gemini/antigravity/scratch/CQVoiceKeyer/recordings/RX_20260809-005952.wav"
+            "file": "C:/Users/chico/.gemini/antigravity/scratch/CQVoiceKeyer/recordings/preset_7.wav"
         }
     ],
     "tx_gain_db": 0,
-    "monitor_volume": 21,
-    "preset_columns": 6
+    "monitor_volume": 100,
+    "preset_columns": 6,
+    "rig_rts": "Low",
+    "tts_rate": 115
 }
