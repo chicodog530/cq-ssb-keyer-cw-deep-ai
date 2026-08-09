@@ -58,5 +58,19 @@ CQ Voice Keyer requires you to map your inputs and outputs correctly.
 
 Make sure to adjust the **TX Audio Gain** slider on the Dashboard so you don't overdrive your radio's ALC!
 
+## Running From Source (For Developers & Linux/Mac Users)
+If you prefer not to use the pre-compiled `.exe` file, you can run the app directly from its Python source code:
+
+1. Make sure you have **Python 3.10+** installed.
+2. Clone or download this repository.
+3. If on Windows, simply double-click the **`install_and_run.bat`** script. It will automatically create a virtual environment, install all the required packages, and launch the app.
+4. If on macOS/Linux, run the following in your terminal:
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   python main.py
+   ```
+
 ## License
 This project is open-source under the MIT License. See `LICENSE` for more details.

@@ -17,7 +17,7 @@
         },
         {
             "text": "POTA CQ",
-            "file": "C:/Users/chico/.gemini/antigravity/scratch/CQVoiceKeyer/recordings/RX_20260808-231515.wav"
+            "file": "C:/Users/chico/.gemini/antigravity/scratch/CQVoiceKeyer/recordings/RX_20260809-005952.wav"
         },
         {
             "text": "Station ID",
@@ -37,7 +37,7 @@
         },
         {
             "text": "dumbshit",
-            "file": "C:/Users/chico/.gemini/antigravity/scratch/CQVoiceKeyer/recordings/preset_6.wav"
+            "file": "C:/Users/chico/.gemini/antigravity/scratch/CQVoiceKeyer/recordings/RX_20260809-010633.wav"
         },
         {
             "text": "New Preset 8",
@@ -45,6 +45,6 @@
         }
     ],
     "tx_gain_db": 0,
-    "monitor_volume": 35,
+    "monitor_volume": 21,
     "preset_columns": 6
 }
