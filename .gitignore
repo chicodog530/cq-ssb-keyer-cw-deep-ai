@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+settings.json
+recordings/
+rigctld_debug.log
+.venv/
+venv/
+env/
