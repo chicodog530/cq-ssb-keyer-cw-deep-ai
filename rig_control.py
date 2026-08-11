@@ -30,7 +30,13 @@ class RigController:
         
     @staticmethod
     def get_models():
-        exe_path = os.path.join(os.getcwd(), "rigctld", "rigctld-wsjtx.exe")
+        import sys
+        import os
+        if hasattr(sys, '_MEIPASS'):
+            base_dir = sys._MEIPASS
+        else:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+        exe_path = os.path.join(base_dir, "rigctld", "rigctld-wsjtx.exe")
         models = []
         if not os.path.exists(exe_path):
             return models
@@ -58,8 +64,18 @@ class RigController:
         self._thread.start()
 
     def _log(self, msg):
-        with open("rigctld_debug.log", "a") as f:
-            f.write(f"{time.strftime('%H:%M:%S')} - {msg}\n")
+        app_data_dir = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), 'CQ Voice Keyer')
+        if not os.path.exists(app_data_dir):
+            try:
+                os.makedirs(app_data_dir)
+            except Exception:
+                pass
+        log_file = os.path.join(app_data_dir, "rigctld_debug.log")
+        try:
+            with open(log_file, "a") as f:
+                f.write(f"{time.strftime('%H:%M:%S')} - {msg}\n")
+        except Exception:
+            pass
         print(msg)
 
     def _start_rigctld_process(self):
@@ -92,7 +108,14 @@ class RigController:
         if rts == "High": conf.append("rts_state=ON")
         elif rts == "Low": conf.append("rts_state=OFF")
         
-        exe_path = os.path.join(os.getcwd(), "rigctld", "rigctld-wsjtx.exe")
+        import sys
+        import os
+        if hasattr(sys, '_MEIPASS'):
+            base_dir = sys._MEIPASS
+        else:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            
+        exe_path = os.path.join(base_dir, "rigctld", "rigctld-wsjtx.exe")
         self._log(f"Starting rigctld. Exists: {os.path.exists(exe_path)}")
         if os.path.exists(exe_path) and com_port:
             try:
@@ -100,7 +123,12 @@ class RigController:
                 args = [exe_path, "-m", str(model), "-r", com_port, "-s", str(baud), "-t", str(self.port)]
                 if conf:
                     args.extend(["-C", ",".join(conf)])
-                self._rigctld_process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                self._rigctld_process = subprocess.Popen(
+                    args, 
+                    stdout=subprocess.PIPE, 
+                    stderr=subprocess.PIPE,
+                    creationflags=subprocess.CREATE_NO_WINDOW
+                )
                 self._log(f"Started bundled rigctld with args: {args}")
             except Exception as e:
                 self._rigctld_process = None
@@ -252,19 +280,26 @@ class RigController:
             with self._lock:
                 self._disconnect()
                 self._start_rigctld_process()
-                time.sleep(2.5) # Give it time to initialize and grab the COM port
                 
+                # Give it time to initialize and grab the COM port, retry for up to 6 seconds
+                connected = False
+                for _ in range(12):
+                    time.sleep(0.5)
+                    if self._rigctld_process and self._rigctld_process.poll() is not None:
+                        self.last_error = f"rigctld process exited prematurely (code {self._rigctld_process.returncode}). Check settings."
+                        return False
+                        
+                    self._connect()
+                    if self.connected:
+                        connected = True
+                        break
+                        
                 if not self._rigctld_process:
                     if not self.last_error:
                         self.last_error = "rigctld-wsjtx.exe process failed to start completely. Is the rigctld folder missing?"
                     return False
                     
-                if self._rigctld_process.poll() is not None:
-                    self.last_error = f"rigctld process exited prematurely (code {self._rigctld_process.returncode}). Check settings."
-                    return False
-                    
-                self._connect()
-                if not self.connected:
+                if not connected:
                     return False
                     
                 res = self._send_cmd("f")

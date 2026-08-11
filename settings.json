@@ -14,12 +14,12 @@
         {
             "text": "General CQ",
             "file": "C:/Users/chico/.gemini/antigravity/scratch/CQVoiceKeyer/recordings/General_CQ.wav",
-            "tts_text": "c q cq this is  kilo echo zero charlie gold bravo calling cq cq  anyone anywhere"
+            "tts_text": "c q cq this is  kilo echo zero charlie golf bravo calling cq cq  anyone anywhere"
         },
         {
             "text": "POTA CQ",
             "file": "C:/Users/chico/.gemini/antigravity/scratch/CQVoiceKeyer/recordings/POTA_CQ.wav",
-            "tts_text": ""
+            "tts_text": "c q cq parks on the air c q cq pota"
         },
         {
             "text": "Station ID",
@@ -34,7 +34,7 @@
         {
             "text": "Freq Clear?",
             "file": "C:/Users/chico/.gemini/antigravity/scratch/CQVoiceKeyer/recordings/Freq_Clear.wav",
-            "tts_text": "is this frequncy in use"
+            "tts_text": "is this frequency in use"
         },
         {
             "text": "73' ",
@@ -46,12 +46,37 @@
     "monitor_volume": 100,
     "preset_columns": 6,
     "rig_rts": "Low",
-    "tts_rate": 115,
+    "tts_rate": 110,
     "use_tts_presets": true,
     "qrz_lookup_method": "Web Browser (Free)",
     "lotw_enable": true,
     "tts_voice_id": "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Speech\\Voices\\Tokens\\TTS_MS_EN-US_DAVID_11.0",
     "tts_send_rst": false,
     "tts_include_my_call": false,
-    "my_callsign": "KE0CGB"
+    "my_callsign": "KE0CGB",
+    "cw_dsp_pitch": 913,
+    "cw_dsp_enable": true,
+    "cw_wpm": 25,
+    "cw_presets": [
+        {
+            "text": "CQ CQ CQ",
+            "cw": "CQ CQ CQ  de KE0CGB CQ CQ"
+        },
+        {
+            "text": "5NN TU",
+            "cw": "5NN TU"
+        },
+        {
+            "text": "73",
+            "cw": "73"
+        },
+        {
+            "text": "QRL?",
+            "cw": "QRL?"
+        },
+        {
+            "text": "QTH",
+            "cw": "QTH"
+        }
+    ]
 }

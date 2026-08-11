@@ -1,76 +1,32 @@
-# CQ Voice Keyer
+# CQ Voice Keyer & DeepCW Decoder
+**By KE0CGB**
 
-A modern, open-source voice keyer for Amateur Radio (Ham Radio) operators. Designed to interface seamlessly with Hamlib (`rigctld`) for CAT rig control, and standard soundcards for high-quality audio routing. 
+A universal ham radio interface tool that allows you to easily manage Voice (SSB/AM/FM) and CW transmissions, record live audio, control your rig via CAT, and decode Morse Code in real-time using an AI Neural Network.
 
 ## Features
-- **One-Click CQ:** Record your voice calling CQ, and play it back instantly with automatic PTT keying.
-- **Auto-Repeat:** Loop your CQ sequence automatically with a customizable delay. 
-- **Digital VFO Dial:** Hover and scroll your mouse wheel over the digits to instantly tune your radio.
-- **Audio Monitoring:** Route your incoming radio audio to your PC headset with a built-in volume slider.
-- **Fail-safe PTT Guard:** Automatically aborts transmitting if audio playback stalls or the radio disconnects.
+*   **DeepCW AI Decoder:** Uses a cutting-edge neural network (ONNX) to decode CW right off your receiver's audio passband.
+*   **Audio CW Encoder:** Generate perfect Audio Modulated CW (MCW) tones to send CW via your digital audio interface (USB/LSB mode).
+*   **Live Audio Waterfall:** Visually identify signals in your passband and simply click them to tune the DSP Bandpass filter!
+*   **Voice Keyer:** Record presets, use Text-To-Speech (TTS), and chain audio files to send automated CQ calls.
+*   **Rig Control:** Full integration with Hamlib's `rigctld` to read and set frequencies, modes, and PTT state.
 
----
+## Installation
+1. Go to the [Releases](https://github.com/chicodog530/cq-ssb-keyer-cw-deep-ai/releases) page and download `CQVoiceKeyer_Setup.exe`.
+2. Run the installer and follow the instructions to install it on your PC.
+3. The installer automatically bundles all dependencies, the AI models, and rig control binaries!
 
-## Setup & Rig Control (Hamlib `rigctld`)
+### Building from Source
+If you want to modify the code or build the installer yourself:
+1. Install Python 3.10+
+2. Install dependencies: `pip install -r requirements.txt`
+3. Ensure you have the `rigctld` binaries in the `rigctld/` folder (included in standard releases).
+4. Run `python main.py` to launch from source.
 
-This software relies on **Hamlib** (specifically `rigctld.exe`) to communicate with your radio. `rigctld` is a background service that translates network commands from CQ Voice Keyer into CAT commands for your specific radio model.
-
-### 1. Installing Hamlib
-1. Download the latest version of Hamlib for Windows (e.g. `hamlib-w64-4.5.5.zip`) from the [official Hamlib GitHub releases](https://github.com/Hamlib/Hamlib/releases).
-2. Extract the ZIP file to a folder on your computer (e.g., `C:\Hamlib`).
-
-### 2. Finding your Radio Model ID
-Hamlib uses an ID number for each radio model. You can find your radio's ID by opening a Command Prompt and running:
-```cmd
-cd C:\Hamlib\bin
-rigctl.exe -l
-```
-Scroll through the list to find your radio (e.g., the Yaesu FT-710 is usually `1047`).
-
-### 3. Running `rigctld`
-Before launching CQ Voice Keyer, you must start `rigctld.exe` so it can talk to your radio. Open a Command Prompt and run the following command, replacing the parameters with your radio's specifics:
-
-```cmd
-C:\Hamlib\bin\rigctld.exe -m 1047 -r COM4 -s 4800
-```
-- `-m 1047` is your Radio Model ID.
-- `-r COM4` is the COM port your radio is connected to.
-- `-s 4800` is the baud rate of your radio.
-
-**Tip:** Create a `.bat` file on your desktop with this command so you can just double-click it to start your rig control before using the app!
-
-### 4. Configuring CQ Voice Keyer
-1. Launch CQ Voice Keyer.
-2. Go to the **Settings** tab.
-3. Under **Rig Settings**, ensure the COM port, baud rate, and radio model match what you used for `rigctld`.
-4. Click **Test CAT** to confirm the connection is successful.
-
----
-
-## Audio Setup
-
-CQ Voice Keyer requires you to map your inputs and outputs correctly.
-
-1. **Radio RX Input:** The soundcard input where your radio's receive audio comes in (e.g., Yaesu USB Audio).
-2. **Radio TX Output:** The soundcard output that sends audio to your radio to transmit.
-3. **Microphone Input:** Your PC Headset or desk microphone used to record your voice.
-4. **Monitor Output:** Your PC Speakers or Headset used to monitor the radio traffic.
-
-Make sure to adjust the **TX Audio Gain** slider on the Dashboard so you don't overdrive your radio's ALC!
-
-## Running From Source (For Developers & Linux/Mac Users)
-If you prefer not to use the pre-compiled `.exe` file, you can run the app directly from its Python source code:
-
-1. Make sure you have **Python 3.10+** installed.
-2. Clone or download this repository.
-3. If on Windows, simply double-click the **`install_and_run.bat`** script. It will automatically create a virtual environment, install all the required packages, and launch the app.
-4. If on macOS/Linux, run the following in your terminal:
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate
-   pip install -r requirements.txt
-   python main.py
-   ```
+## Building the Windows Installer
+You can build a standalone Windows Installer (`Setup.exe`) using PyInstaller and Inno Setup. 
+1. Install [Inno Setup 6](https://jrsoftware.org/isinfo.php).
+2. Simply double click the `build_exe.bat` file! 
+3. It will automatically bundle the UI, Rig Control binaries, the AI `.onnx` models, and then invoke Inno Setup to create `CQVoiceKeyer_Setup.exe` in the `installer_out/` folder.
 
 ## License
-This project is open-source under the MIT License. See `LICENSE` for more details.
+MIT License. See `LICENSE` for more info.

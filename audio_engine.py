@@ -314,6 +314,87 @@ class AudioEngine:
                 pass
             self.monitor_stream = None
 
+    def apply_bandpass_filter(self, data, sample_rate, center_freq, bandwidth=150):
+        try:
+            import scipy.signal
+            # Recreate filter if params change
+            if not hasattr(self, 'filter_params') or self.filter_params != (sample_rate, center_freq, bandwidth):
+                nyq = 0.5 * sample_rate
+                low = (center_freq - bandwidth/2) / nyq
+                high = (center_freq + bandwidth/2) / nyq
+                low = max(0.01, low)
+                high = min(0.99, high)
+                self.b, self.a = scipy.signal.butter(3, [low, high], btype='band')
+                self.zi = scipy.signal.lfilter_zi(self.b, self.a)
+                self.filter_params = (sample_rate, center_freq, bandwidth)
+                
+            filtered_data, self.zi = scipy.signal.lfilter(self.b, self.a, data, zi=self.zi)
+            return filtered_data.astype(np.float32)
+        except ImportError:
+            print("scipy is required for DSP filtering")
+            return data
+
+    def start_cw_decoding(self, rx_device, cw_engine, callback, samplerate=None, use_filter=False, filter_freq=700, filter_bw=150):
+        if hasattr(self, 'is_cw_decoding') and self.is_cw_decoding:
+            return False
+            
+        try:
+            device_info = sd.query_devices(rx_device, 'input')
+            if samplerate is None:
+                samplerate = int(device_info['default_samplerate'])
+                
+            self.cw_buffer = np.array([], dtype=np.float32)
+            self.is_cw_decoding = True
+            
+            def decode_thread_func(buffer_copy, sr):
+                cfreq = filter_freq if use_filter else None
+                text = cw_engine.decode(buffer_copy, sr, center_freq=cfreq)
+                if text:
+                    callback(text)
+            
+            def callback_stream(indata, frames, time, status):
+                if status:
+                    print(status)
+                mono_data = indata[:, 0] if len(indata.shape) > 1 else indata.flatten()
+                
+                if not hasattr(self, 'cw_raw_buffer_accum'):
+                    self.cw_raw_buffer_accum = np.array([], dtype=np.float32)
+                self.cw_raw_buffer_accum = np.concatenate((self.cw_raw_buffer_accum, mono_data))
+                if len(self.cw_raw_buffer_accum) > 16384:
+                    self.cw_raw_buffer_accum = self.cw_raw_buffer_accum[-16384:]
+                
+                self.cw_raw_buffer = self.cw_raw_buffer_accum.copy()
+                self.cw_samplerate = samplerate
+                
+                if use_filter:
+                    mono_data = self.apply_bandpass_filter(mono_data, samplerate, filter_freq, filter_bw)
+                    
+                self.cw_buffer = np.concatenate((self.cw_buffer, mono_data))
+                
+                min_samples = int(5.0 * samplerate)
+                if len(self.cw_buffer) >= min_samples:
+                    buf_copy = self.cw_buffer.copy()
+                    self.cw_buffer = np.array([], dtype=np.float32)
+                    threading.Thread(target=decode_thread_func, args=(buf_copy, samplerate)).start()
+
+            self.cw_stream = sd.InputStream(device=rx_device, samplerate=samplerate, channels=1, callback=callback_stream)
+            self.cw_stream.start()
+            return True
+        except Exception as e:
+            print(f"Error starting CW decode: {e}")
+            self.is_cw_decoding = False
+            return False
+
+    def stop_cw_decoding(self):
+        self.is_cw_decoding = False
+        if hasattr(self, 'cw_stream') and self.cw_stream:
+            try:
+                self.cw_stream.abort()
+                self.cw_stream.close()
+            except:
+                pass
+            self.cw_stream = None
+
     def start_live_mic(self, mic_device, tx_device, tx_gain_db=0):
         if self.is_recording or self.is_playing or getattr(self, 'is_live_mic', False):
             return False
@@ -445,4 +526,63 @@ class AudioEngine:
         engine.save_to_file(text_to_speak, filepath)
         engine.runAndWait()
         
+        return True
+
+    def generate_cw_wav(self, text, filepath, wpm=20, freq_hz=700, sample_rate=48000):
+        # Standard PARIS timing
+        dot_len = 1.2 / wpm
+        dash_len = dot_len * 3
+        elem_space = dot_len
+        char_space = dot_len * 3
+        word_space = dot_len * 7
+        
+        MORSE_CODE_DICT = {
+            'A':'.-', 'B':'-...', 'C':'-.-.', 'D':'-..', 'E':'.', 'F':'..-.',
+            'G':'--.', 'H':'....', 'I':'..', 'J':'.---', 'K':'-.-', 'L':'.-..',
+            'M':'--', 'N':'-.', 'O':'---', 'P':'.--.', 'Q':'--.-', 'R':'.-.',
+            'S':'...', 'T':'-', 'U':'..-', 'V':'...-', 'W':'.--', 'X':'-..-',
+            'Y':'-.--', 'Z':'--..', '1':'.----', '2':'..---', '3':'...--',
+            '4':'....-', '5':'.....', '6':'-....', '7':'--...', '8':'---..',
+            '9':'----.', '0':'-----', ', ':'--..--', '.':'.-.-.-', '?':'..--..',
+            '/':'-..-.', '-':'-....-', '(':'-.--.', ')':'-.--.-'
+        }
+        
+        audio_data = []
+        
+        def add_tone(duration):
+            t = np.linspace(0, duration, int(sample_rate * duration), False)
+            tone = np.sin(2 * np.pi * freq_hz * t)
+            # Apply a simple cosine envelope (e.g. 5ms) to avoid key clicks
+            ramp_time = min(0.005, duration/2)
+            ramp_samples = int(sample_rate * ramp_time)
+            if ramp_samples > 0:
+                window = np.hanning(ramp_samples * 2)
+                tone[:ramp_samples] *= window[:ramp_samples]
+                tone[-ramp_samples:] *= window[-ramp_samples:]
+            audio_data.extend(tone)
+            
+        def add_silence(duration):
+            audio_data.extend(np.zeros(int(sample_rate * duration)))
+            
+        for char in text.upper():
+            if char == ' ':
+                add_silence(word_space - char_space)
+            elif char in MORSE_CODE_DICT:
+                code = MORSE_CODE_DICT[char]
+                for i, symbol in enumerate(code):
+                    if symbol == '.':
+                        add_tone(dot_len)
+                    elif symbol == '-':
+                        add_tone(dash_len)
+                    if i < len(code) - 1:
+                        add_silence(elem_space)
+                add_silence(char_space)
+                
+        audio_np = np.array(audio_data, dtype=np.float32)
+        # Normalize to -3dB
+        if len(audio_np) > 0:
+            target_peak = 10 ** (-3.0 / 20.0)
+            audio_np = audio_np * target_peak
+            
+        sf.write(filepath, audio_np, sample_rate)
         return True

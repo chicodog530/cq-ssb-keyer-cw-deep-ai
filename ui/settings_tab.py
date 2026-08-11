@@ -231,7 +231,16 @@ class SettingsTab(QWidget):
         self.show_tooltips_check = QCheckBox("Show Helpful Tooltips")
         self.show_tooltips_check.setChecked(self.settings_manager.get("show_tooltips", True))
         self.show_tooltips_check.stateChanged.connect(lambda s: self.settings_manager.set("show_tooltips", bool(s)))
-        gen_layout.addRow("UI Options:", self.show_tooltips_check)
+        
+        self.show_splash_check = QCheckBox("Show Splash Screen on Startup")
+        self.show_splash_check.setChecked(self.settings_manager.get("show_splash", True))
+        self.show_splash_check.stateChanged.connect(lambda s: self.settings_manager.set("show_splash", bool(s)))
+        
+        ui_options_layout = QVBoxLayout()
+        ui_options_layout.addWidget(self.show_tooltips_check)
+        ui_options_layout.addWidget(self.show_splash_check)
+        
+        gen_layout.addRow("UI Options:", ui_options_layout)
         
         self.tabs.addTab(gen_tab, "General")
         

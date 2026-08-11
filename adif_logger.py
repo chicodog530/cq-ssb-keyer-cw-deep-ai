@@ -3,7 +3,13 @@ import datetime
 
 class ADIFLogger:
     def __init__(self, filename="cq-voice-keyer-log.adi"):
-        self.filename = filename
+        app_data_dir = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), 'CQ Voice Keyer')
+        if not os.path.exists(app_data_dir):
+            try:
+                os.makedirs(app_data_dir)
+            except Exception:
+                pass
+        self.filename = os.path.join(app_data_dir, filename)
         self._ensure_header()
 
     def _ensure_header(self):

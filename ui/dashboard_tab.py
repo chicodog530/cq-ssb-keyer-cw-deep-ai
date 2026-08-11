@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QHBoxLayout, QProgressBar, QScrollArea, QMenu, QInputDialog, QFileDialog, QCheckBox, QLineEdit, QSpinBox, QDialog, QGroupBox, QSlider, QGridLayout, QToolButton, QWidgetAction, QComboBox
+from PySide6.QtWidgets import QTextEdit, QWidget, QVBoxLayout, QLabel, QPushButton, QHBoxLayout, QProgressBar, QScrollArea, QMenu, QInputDialog, QFileDialog, QCheckBox, QLineEdit, QSpinBox, QDialog, QGroupBox, QSlider, QGridLayout, QToolButton, QWidgetAction, QComboBox
 from PySide6.QtCore import QTimer, Qt, Signal
 from PySide6.QtGui import QAction, QPainter, QColor, QPen, QShortcut, QKeySequence, QWheelEvent
 import time
@@ -308,12 +308,13 @@ class PresetButton(QPushButton):
         )
 
 class DashboardTab(QWidget):
-    def __init__(self, audio_engine, settings_manager, rig_controller, sequence_manager, parent=None):
+    def __init__(self, audio_engine, settings_manager, rig_controller, sequence_manager, cw_engine=None, parent=None):
         super().__init__(parent)
         self.audio_engine = audio_engine
         self.settings_manager = settings_manager
         self.rig_controller = rig_controller
         self.sequence_manager = sequence_manager
+        self.cw_engine = cw_engine
         
         # Connect Sequence Manager Signals
         self.sequence_manager.state_changed.connect(self.on_sequence_state_changed)
