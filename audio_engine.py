@@ -334,6 +334,51 @@ class AudioEngine:
             print("scipy is required for DSP filtering")
             return data
 
+    def estimate_wpm_from_audio(self, audio_data, sample_rate):
+        envelope = np.abs(audio_data)
+        try:
+            import scipy.signal
+            nyq = 0.5 * sample_rate
+            b, a = scipy.signal.butter(2, 20.0 / nyq, btype='low')
+            envelope = scipy.signal.filtfilt(b, a, envelope)
+        except ImportError:
+            pass
+            
+        # Thresholding
+        threshold = np.mean(envelope) + 0.5 * np.std(envelope)
+        if threshold < 0.02: # Too quiet
+            return None
+            
+        key_down = envelope > threshold
+        edges = np.diff(key_down.astype(int))
+        rising = np.where(edges == 1)[0]
+        falling = np.where(edges == -1)[0]
+        
+        if len(rising) == 0 or len(falling) == 0:
+            return None
+            
+        if falling[0] < rising[0]:
+            falling = falling[1:]
+        if len(rising) > len(falling):
+            rising = rising[:len(falling)]
+            
+        pulse_lengths_sec = (falling - rising) / sample_rate
+        valid_pulses = pulse_lengths_sec[(pulse_lengths_sec > 0.02) & (pulse_lengths_sec < 1.0)]
+        
+        if len(valid_pulses) < 3:
+            return None
+            
+        # 25th percentile represents the dot length (dits)
+        dot_length_sec = np.percentile(valid_pulses, 25)
+        if dot_length_sec <= 0:
+            return None
+            
+        wpm = 1.2 / dot_length_sec
+        if wpm < 5 or wpm > 70:
+            return None
+            
+        return int(round(wpm))
+
     def start_cw_decoding(self, rx_device, cw_engine, callback, samplerate=None, use_filter=False, filter_freq=700, filter_bw=150):
         if hasattr(self, 'is_cw_decoding') and self.is_cw_decoding:
             return False
@@ -349,8 +394,9 @@ class AudioEngine:
             def decode_thread_func(buffer_copy, sr):
                 cfreq = filter_freq if use_filter else None
                 text = cw_engine.decode(buffer_copy, sr, center_freq=cfreq)
-                if text:
-                    callback(text)
+                wpm = self.estimate_wpm_from_audio(buffer_copy, sr)
+                if text or wpm:
+                    callback(text, wpm)
             
             def callback_stream(indata, frames, time, status):
                 if status:
