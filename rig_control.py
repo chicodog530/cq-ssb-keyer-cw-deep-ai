@@ -32,16 +32,25 @@ class RigController:
     def get_models():
         import sys
         import os
-        if hasattr(sys, '_MEIPASS'):
-            base_dir = sys._MEIPASS
-        else:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-        exe_path = os.path.join(base_dir, "rigctld", "rigctld-wsjtx.exe")
         models = []
-        if not os.path.exists(exe_path):
-            return models
+        is_windows = (os.name == 'nt')
+        
+        if is_windows:
+            if hasattr(sys, '_MEIPASS'):
+                base_dir = sys._MEIPASS
+            else:
+                base_dir = os.path.dirname(os.path.abspath(__file__))
+            exe_path = os.path.join(base_dir, "rigctld", "rigctld-wsjtx.exe")
+            if not os.path.exists(exe_path):
+                return models
+            cmd = [exe_path, "-l"]
+            kwargs = {"creationflags": subprocess.CREATE_NO_WINDOW}
+        else:
+            cmd = ["rigctld", "-l"]
+            kwargs = {}
+            
         try:
-            output = subprocess.check_output([exe_path, "-l"], text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+            output = subprocess.check_output(cmd, text=True, **kwargs)
             for line in output.split('\n'):
                 parts = line.strip().split()
                 if len(parts) >= 3 and parts[0].isdigit():
@@ -110,26 +119,37 @@ class RigController:
         
         import sys
         import os
-        if hasattr(sys, '_MEIPASS'):
-            base_dir = sys._MEIPASS
+        is_windows = (os.name == 'nt')
+        
+        if is_windows:
+            if hasattr(sys, '_MEIPASS'):
+                base_dir = sys._MEIPASS
+            else:
+                base_dir = os.path.dirname(os.path.abspath(__file__))
+            exe_path = os.path.join(base_dir, "rigctld", "rigctld-wsjtx.exe")
+            executable = exe_path
+            can_run = os.path.exists(exe_path)
+            self._log(f"Starting bundled rigctld. Exists: {can_run}")
+            kwargs = {"creationflags": subprocess.CREATE_NO_WINDOW}
         else:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
+            executable = "rigctld"
+            can_run = True
+            self._log("Starting system rigctld.")
+            kwargs = {}
             
-        exe_path = os.path.join(base_dir, "rigctld", "rigctld-wsjtx.exe")
-        self._log(f"Starting rigctld. Exists: {os.path.exists(exe_path)}")
-        if os.path.exists(exe_path) and com_port:
+        if can_run and com_port:
             try:
                 # -m model -r com_port -s baud -t tcp_port
-                args = [exe_path, "-m", str(model), "-r", com_port, "-s", str(baud), "-t", str(self.port)]
+                args = [executable, "-m", str(model), "-r", com_port, "-s", str(baud), "-t", str(self.port)]
                 if conf:
                     args.extend(["-C", ",".join(conf)])
                 self._rigctld_process = subprocess.Popen(
                     args, 
                     stdout=subprocess.PIPE, 
                     stderr=subprocess.PIPE,
-                    creationflags=subprocess.CREATE_NO_WINDOW
+                    **kwargs
                 )
-                self._log(f"Started bundled rigctld with args: {args}")
+                self._log(f"Started rigctld with args: {args}")
             except Exception as e:
                 self._rigctld_process = None
                 self._log(f"Error starting rigctld: {e}")
